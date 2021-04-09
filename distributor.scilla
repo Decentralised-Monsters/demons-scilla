@@ -1,0 +1,53 @@
+scilla_version 0
+
+(***************************************************)
+(*               Associated library                *)
+(***************************************************)
+import BoolUtils
+library DemonDistributor
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+  Cons {Message} msg nil_msg
+
+(* Error events *)
+type Error =
+  | CodeNotAuthorised
+  | CodeNotFound
+  | CodeTokenExists
+  | CodeUnexpectedError
+
+let make_error_event =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeNotAuthorised    => Int32 -1
+      | CodeNotFound         => Int32 -2
+      | CodeTokenExists      => Int32 -3
+      | CodeUnexpectedError  => Int32 -4
+      end
+    in
+    { _eventname : "Error"; code : result_code }
+
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+
+contract DemonDistributor
+(
+  demons: ByStr20
+)
+
+(* Mutable fields *)
+
+(* Total token count *)
+field total_supply: Uint256 = Uint256 0
+
+
+(* Emit Errors *)
+procedure EmitError(err : Error)
+  e = make_error_event err;
+  event e;
+  throw
+end

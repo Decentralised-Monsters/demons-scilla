@@ -262,18 +262,11 @@ transition mint(to: ByStr20, token_id: Uint256, token_uri: String)
       (* Add to total_supply *)
       current_supply <- total_supply;
       new_supply = builtin add current_supply one;
-      total_supply := new_supply; 
+      total_supply := new_supply;
       (* Emit success event *)
       e = {_eventname: "MintSuccess"; by: _sender; recipient: to;
            token_id: token_id; token_uri: token_uri};
-      event e;
-      (* Send dummy message.                                                         *)
-      (* Revert transition if invalid recipient contract. Ignore if external address *)
-      msg_to_recipient = { _tag : "recipientAcceptMint"; _recipient : to; _amount : Uint128 0 };
-      msg_to_sender = { _tag : "mintCallBack"; _recipient : _sender; _amount : Uint128 0;
-                        recipient : to; token_id : token_id; token_uri : token_uri };
-      msgs = two_msgs msg_to_recipient msg_to_sender;
-      send msgs
+      event e
     | False =>
       (* Unauthorised transaction*)
       err = CodeNotAuthorised;
