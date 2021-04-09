@@ -56,6 +56,23 @@ let curve_integral =
     let integral = builtin mul precision_nexp t_exponent in
       builtin div integral precision
 
+let price =
+  fun (count: Uint256) =>
+  fun (reserve: Uint256) =>
+  fun (total_supply: Uint256) =>
+  fun (exponent: Uint32) =>
+    let total = builtin add total_supply count in
+    let value = builtin sub total reserve in
+      curve_integral exponent value
+
+let reward =
+  fun (count: Uint256) =>
+  fun (reserve: Uint256) =>
+  fun (total_supply: Uint256) =>
+  fun (exponent: Uint32) =>
+    let amount = builtin sub total_supply count in
+    let value = curve_integral exponent amount in
+      builtin sub reserve value
 
 (***************************************************)
 (*             The contract definition             *)
