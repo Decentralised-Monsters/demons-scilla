@@ -4,12 +4,7 @@ scilla_version 0
 (*               Associated library                *)
 (***************************************************)
 import BoolUtils
-library DemonDistributor
-
-let one_msg = 
-  fun (msg : Message) => 
-  let nil_msg = Nil {Message} in
-  Cons {Message} msg nil_msg
+library BondingCurvedDistributor
 
 (* Error events *)
 type Error =
@@ -17,6 +12,15 @@ type Error =
   | CodeNotFound
   | CodeTokenExists
   | CodeUnexpectedError
+
+let precision = Uint256 10000000000
+let zero256 = Uint256 0
+let one32 = Uint32 1
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+  Cons {Message} msg nil_msg
 
 let make_error_event =
   fun (result : Error) =>
@@ -30,13 +34,37 @@ let make_error_event =
     in
     { _eventname : "Error"; code : result_code }
 
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_uint256 = @option_value Uint256
+
+let curve_integral =
+  fun (exponent: Uint32) =>
+  fun (t: Uint256) =>
+    let nexp = builtin add one32 exponent in
+    let some_nexp256 = builtin to_uint256 nexp in
+    let nexp256 = option_uint256 zero256 some_nexp256 in
+    let t_exponent = builtin pow t nexp in
+    let precision_nexp = builtin div precision nexp256 in
+    let integral = builtin mul precision_nexp t_exponent in
+      builtin div integral precision
+
+
 (***************************************************)
 (*             The contract definition             *)
 (***************************************************)
 
-contract DemonDistributor
+contract BondingCurvedDistributor
 (
-  demons: ByStr20
+  demons: ByStr20,
+  exponent: Uint256
 )
 
 (* Mutable fields *)
@@ -44,10 +72,14 @@ contract DemonDistributor
 (* Total token count *)
 field total_supply: Uint256 = Uint256 0
 
-
 (* Emit Errors *)
 procedure EmitError(err : Error)
   e = make_error_event err;
   event e;
   throw
 end
+
+
+(*transition CurveIntegral(t: Uint256)*)
+(*  nexp = builtin add exponent ZERO256*)
+(*end*)
