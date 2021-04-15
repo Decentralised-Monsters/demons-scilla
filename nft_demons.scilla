@@ -454,11 +454,14 @@ transition BatchMint(to: ByStr20, token_uris_list: List String)
 
   forall input_list Minting;
 
+  total <- total_supply;
+
   msg_to_recipient = {
     _tag : "RecipientAcceptBatchMint";
     _recipient : to;
     _amount : Uint128 0;
-    ids: ids
+    ids: ids;
+    total_supply: total
   };
   msg_to_sender = {
     _tag : "BatchMintCallBack";

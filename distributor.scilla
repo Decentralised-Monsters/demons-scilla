@@ -39,7 +39,21 @@ let option_value =
     | None => default
     end
 
+let list_length : forall 'A. List 'A -> Uint32 =
+  tfun 'A =>
+  fun (l : List 'A) =>
+  let foldl = @list_foldl 'A Uint32 in
+  let init = Uint32 0 in
+  let one = Uint32 1 in
+  let iter =
+    fun (z : Uint32) =>
+    fun (h : 'A) =>
+      builtin add one z
+  in
+    foldl iter init l
+
 let option_uint256 = @option_value Uint256
+let get_length = @list_length Uint256
 
 let curve_integral =
   fun (exponent: Uint32) =>
@@ -83,7 +97,8 @@ contract BondingCurvedDistributor
 (* Mutable fields *)
 
 (* Total token count *)
-field total: Uint256 = Uint256 0
+field total_reserve: Uint256 = zero256
+field total: Uint256 = zero256
 
 field tokens_list: List Uint256 = Nil {Uint256}
 
@@ -114,6 +129,16 @@ procedure UpdateTotalSupply()
   send msgs
 end
 
+procedure UpdateTokenReserve()
+  list <- tokens_list;
+
+  length = get_length list;
+  length = builtin to_uint256 length;
+  length = option_uint256 zero256 length;
+
+  total_reserve := length
+end
+
 procedure AddToken(id: Uint256)
   list <- tokens_list;
   new_list = Cons {Uint256} id list;
@@ -132,10 +157,6 @@ procedure Minting(token_uris_list: List String)
   send msgs
 end
 
-(*transition CurveIntegral(t: Uint256)*)
-(*  nexp = builtin add exponent ZERO256*)
-(*end*)
-
 transition BatchMint(token_uris_list: List String)
   Minting token_uris_list
 end
@@ -147,9 +168,12 @@ transition TotalSupplyCallBack(total_supply: Uint256)
   total := total_supply
 end
 
-transition RecipientAcceptBatchMint(ids: List Uint256)
+transition RecipientAcceptBatchMint(ids: List Uint256, total_supply: Uint256)
   IsMain;
-  forall ids AddToken
+  forall ids AddToken;
+  UpdateTokenReserve;
+
+  total := total_supply
 end
 
 transition BatchMintCallBack()
