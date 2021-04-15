@@ -9,9 +9,7 @@ library BondingCurvedDistributor
 (* Error events *)
 type Error =
   | CodeNotAuthorised
-  | CodeNotFound
-  | CodeTokenExists
-  | CodeUnexpectedError
+  | CodeNotMain
 
 let precision = Uint256 10000000000
 let zero256 = Uint256 0
@@ -27,9 +25,7 @@ let make_error_event =
     let result_code = 
       match result with
       | CodeNotAuthorised    => Int32 -1
-      | CodeNotFound         => Int32 -2
-      | CodeTokenExists      => Int32 -3
-      | CodeUnexpectedError  => Int32 -4
+      | CodeNotMain          => Int32 -2
       end
     in
     { _eventname : "Error"; code : result_code }
@@ -87,7 +83,7 @@ contract BondingCurvedDistributor
 (* Mutable fields *)
 
 (* Total token count *)
-field total_supply: Uint256 = Uint256 0
+field total: Uint256 = Uint256 0
 
 (* Emit Errors *)
 procedure EmitError(err : Error)
@@ -96,7 +92,62 @@ procedure EmitError(err : Error)
   throw
 end
 
+procedure IsMain()
+  is_main_contract = builtin eq demons _sender;
+
+  match is_main_contract with
+  | True =>
+  | False =>
+    err = CodeNotMain;
+    ThrowError err
+  end
+end
+
+procedure UpdateTotalSupply()
+  msg_to_demons = {
+    _tag: "TotalSupply";
+    _recipient: demons;
+    _amount: Uint128 0;
+  };
+  msgs = one_msg msg_to_demons;
+  send msgs
+end
+
+procedure procedureName()
+
+end
+
+procedure Minting(token_uris_list: List String)
+  msg_to_demons = {
+    _tag: "BatchMint";
+    _recipient: demons;
+    _amount: Uint128 0;
+    to: _this_address;
+    token_uris_list: token_uris_list
+  };
+  msgs = one_msg msg_to_demons;
+  send msgs
+end
 
 (*transition CurveIntegral(t: Uint256)*)
 (*  nexp = builtin add exponent ZERO256*)
 (*end*)
+
+transition BatchMint(token_uris_list: List String)
+  Minting token_uris_list;
+  
+end
+
+(* callbacks *)
+transition TotalSupplyCallBack(total_supply: Uint256)
+  IsMain;
+
+  total := total_supply
+end
+
+transition RecipientAcceptBatchMint()
+end
+
+transition BatchMintCallBack()
+end
+(* callbacks *)
