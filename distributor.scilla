@@ -66,7 +66,7 @@ let curve_integral =
     let integral = builtin mul precision_nexp t_exponent in
       builtin div integral precision
 
-let price =
+let get_price =
   fun (count: Uint256) =>
   fun (reserve: Uint256) =>
   fun (total_supply: Uint256) =>
@@ -75,7 +75,7 @@ let price =
     let value = builtin sub total reserve in
       curve_integral exponent value
 
-let reward =
+let get_reward =
   fun (count: Uint256) =>
   fun (reserve: Uint256) =>
   fun (total_supply: Uint256) =>
@@ -91,7 +91,7 @@ let reward =
 contract BondingCurvedDistributor
 (
   demons: ByStr20,
-  exponent: Uint256
+  exponent: Uint32
 )
 
 (* Mutable fields *)
@@ -159,6 +159,19 @@ end
 
 transition BatchMint(token_uris_list: List String)
   Minting token_uris_list
+end
+
+transition Buy(count: Uint256)
+  reserve <- total_reserve;
+  total_supply <- total;
+
+  price = get_price count reserve total_supply exponent;
+
+  e = {
+    _eventname: "test";
+    price: price
+  };
+  event e
 end
 
 (* callbacks *)
