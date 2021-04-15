@@ -20,7 +20,7 @@ let one_msg =
   let nil_msg = Nil {Message} in
   Cons {Message} msg nil_msg
 
-let make_error_event =
+let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
@@ -28,7 +28,7 @@ let make_error_event =
       | CodeNotMain          => Int32 -2
       end
     in
-    { _eventname : "Error"; code : result_code }
+    { _exception : "Error"; code : result_code }
 
 let option_value =
   tfun 'A =>
@@ -85,11 +85,12 @@ contract BondingCurvedDistributor
 (* Total token count *)
 field total: Uint256 = Uint256 0
 
+field tokens_list: List Uint256 = Nil {Uint256}
+
 (* Emit Errors *)
-procedure EmitError(err : Error)
-  e = make_error_event err;
-  event e;
-  throw
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
 end
 
 procedure IsMain()
@@ -107,14 +108,16 @@ procedure UpdateTotalSupply()
   msg_to_demons = {
     _tag: "TotalSupply";
     _recipient: demons;
-    _amount: Uint128 0;
+    _amount: Uint128 0
   };
   msgs = one_msg msg_to_demons;
   send msgs
 end
 
-procedure procedureName()
-
+procedure AddToken(id: Uint256)
+  list <- tokens_list;
+  new_list = Cons {Uint256} id list;
+  tokens_list := new_list
 end
 
 procedure Minting(token_uris_list: List String)
@@ -134,8 +137,7 @@ end
 (*end*)
 
 transition BatchMint(token_uris_list: List String)
-  Minting token_uris_list;
-  
+  Minting token_uris_list
 end
 
 (* callbacks *)
@@ -145,7 +147,9 @@ transition TotalSupplyCallBack(total_supply: Uint256)
   total := total_supply
 end
 
-transition RecipientAcceptBatchMint()
+transition RecipientAcceptBatchMint(ids: List Uint256)
+  IsMain;
+  forall ids AddToken
 end
 
 transition BatchMintCallBack()
