@@ -11,9 +11,10 @@ type Error =
   | CodeNotAuthorised
   | CodeNotMain
 
-let customization = Uint256 500000000000
+let customization = Uint256 100000000000
 let exponent = Uint32 2
 let zero256 = Uint256 0
+let zero128 = Uint128 0
 let zero32 = Uint32 0
 let one256 = Uint256 1
 let one32 = Uint32 1
@@ -43,7 +44,12 @@ let option_value =
     end
 
 let option_uint256 = @option_value Uint256
-let option_uint32 = @option_value Uint32
+let option_uint128 = @option_value Uint128
+
+let to_256 =
+  fun (v: Uint32) =>
+    let v32 = builtin to_uint256 v in
+      option_uint256 zero256 v32
 
 let get_ids_list =
   fun (m : Uint32) =>
@@ -74,30 +80,32 @@ let get_ids_list =
     | False => Nil {Uint256}
     end
 
-let pool_balance =
-  fun (s: Uint256) =>
-    let new_n = builtin add exponent one32 in
-    let some_new_n256 =  builtin to_uint256 new_n in
-    let n256 = option_uint256 zero256 some_new_n256 in
-    let m_div_new_n = builtin div customization n256 in
-    let s_exp = builtin pow s new_n in
-      builtin mul m_div_new_n s_exp
-
-let calc_count =
-  fun (amount: Uint128) =>
-  fun (b: Uint256) =>
+(* b = customization / exponent + 1 * s**(exponent + 1) *)
+(* s - total_supply *)
+let get_pool_balance =
   fun (s: Uint256) =>
     let n = builtin add exponent one32 in
-    let some_p = builtin to_uint256 amount in
-    let p = option_uint256 zero256 some_p in
-    let p_div_b = builtin div p b in
-    let pb = builtin add p_div_b one256 in
-    let f = builtin isqrt pb in
-    let next = builtin isqrt f in
-    let v = builtin mul s next in
-    let value = builtin sub v one256 in
-    let some_value =  builtin to_uint32 value in
-      option_uint32 zero32 some_value
+    let n256 = to_256 n in
+    let mn = builtin div customization n256 in
+    let s_pow = builtin pow s n in
+      builtin mul mn s_pow
+
+(* p = (customization / exponent + 1 (s + k) ** exponent + 1) - b *)
+(* s - total_supply *)
+(* b - poolBalance *)
+let get_price =
+  fun (s: Uint256) =>
+  fun (b: Uint256) =>
+    let n = builtin add exponent one32 in
+    let n256 = to_256 n in
+    let mn = builtin div customization n256 in
+    let k256 = to_256 one32 in
+    let sk = builtin add s k256 in
+    let sk_exp = builtin pow sk n in
+    let value = builtin mul mn sk_exp in
+    let amount = builtin sub value b in
+    let some_amount = builtin to_uint128 amount in
+      option_uint128 zero128 some_amount
 
 (***************************************************)
 (*             The contract definition             *)
@@ -112,6 +120,7 @@ contract BondingCurvedDistributor
 
 (* Total token count *)
 field total_reserve: Uint256 = zero256
+field total: Uint256 = zero256
 
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
 
@@ -165,23 +174,32 @@ transition AddReserveList(token_uris_list: List String)
   forall token_uris_list AddReserve
 end
 
-transition Buy()
-  reserve <- total_reserve;
-  b = pool_balance reserve;
-  count = calc_count _amount b reserve;
+transition Buy(total_supply: Uint256)
+  (* total_supply <- total; *)
 
-  list = get_ids_list one32 count reserve;
+  b = get_pool_balance total_supply;
+  price = get_price total_supply b;
+  value = builtin div _amount price;
+
+  (* list = get_ids_list one32 count total; *)
 
   e = {
     _eventname: "Test";
-    b: b;
-    count: count;
-    list: list
+    value: value
   };
   event e
 end
 
 (* callbacks *)
+transition TotalSupplyCallBack(total_supply: Uint256)
+  IsMain;
+
+  total := total_supply
+end
+
 transition BatchMintCallBack(total_supply: Uint256)
+  IsMain;
+
+  total := total_supply
 end
 (* callbacks *)
