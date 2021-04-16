@@ -39,21 +39,10 @@ let option_value =
     | None => default
     end
 
-let list_length : forall 'A. List 'A -> Uint32 =
-  tfun 'A =>
-  fun (l : List 'A) =>
-  let foldl = @list_foldl 'A Uint32 in
-  let init = Uint32 0 in
-  let one = Uint32 1 in
-  let iter =
-    fun (z : Uint32) =>
-    fun (h : 'A) =>
-      builtin add one z
-  in
-    foldl iter init l
-
 let option_uint256 = @option_value Uint256
 let get_length = @list_length Uint256
+let int_head = @list_head Int32
+let merge_list = @list_append String
 
 let curve_integral =
   fun (exponent: Uint32) =>

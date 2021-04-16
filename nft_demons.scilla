@@ -46,60 +46,6 @@ let build_pair =
   fun (input_token_uri : String) =>
     Pair {ByStr20 String} input_to_address input_token_uri
 
-let list_length : forall 'A. List 'A -> Uint32 =
-  tfun 'A =>
-  fun (l : List 'A) =>
-  let foldl = @list_foldl 'A Uint32 in
-  let init = Uint32 0 in
-  let one = Uint32 1 in
-  let iter =
-    fun (z : Uint32) =>
-    fun (h : 'A) =>
-      builtin add one z
-  in
-    foldl iter init l
-
-let option_value =
-  tfun 'A =>
-  fun (default: 'A) =>
-  fun (opt_val: Option 'A) =>
-    match opt_val with
-    | Some v => v
-    | None => default
-    end
-
-let option_uint256 = @option_value Uint256
-let get_length = @list_length String
-
-let get_ids_list =
-  fun (m : Uint32) =>
-  fun (n : Uint32) =>
-  fun (value : Uint256) =>
-    let m_lt_n = builtin lt m n in
-    match m_lt_n with
-    | True =>
-        let delta = builtin sub n m in
-        let delta_nat = builtin to_nat delta in
-        let nil = Nil {Uint256} in
-        let acc_init = Pair {(List Uint256) Uint32} nil n in
-        let step = fun (xs_n : Pair (List Uint256) Uint32) => fun (ignore : Nat) =>
-          match xs_n with
-          | Pair xs n =>
-              let new_n = builtin sub n one32 in
-              let some_new_value = builtin to_uint256 new_n in
-              let new_value = option_uint256 zero some_new_value in
-              let item = builtin add value new_value in
-              let new_xs = Cons {Uint256} item xs in
-              Pair {(List Uint256) Uint32} new_xs new_n
-          end in
-        let fold = @nat_fold (Pair (List Uint256) Uint32) in
-        let xs_m = fold step acc_init delta_nat in
-        match xs_m with
-        | Pair xs m => xs
-        end
-    | False => Nil {Uint256}
-    end
-
 (* Error exception *)
 type Error =
   | CodeNotContractOwner
@@ -448,9 +394,6 @@ transition BatchMint(to: ByStr20, token_uris_list: List String)
   pair_token_uri_list = @list_map String (Pair ByStr20 String);
   tmp_fun = build_pair to;
   input_list = pair_token_uri_list tmp_fun token_uris_list;
-  count = get_length token_uris_list;
-  count = builtin add count one32;
-  ids = get_ids_list one32 count current_token_id_count;
 
   forall input_list Minting;
 
@@ -459,14 +402,13 @@ transition BatchMint(to: ByStr20, token_uris_list: List String)
   msg_to_recipient = {
     _tag : "RecipientAcceptBatchMint";
     _recipient : to;
-    _amount : Uint128 0;
-    ids: ids;
-    total_supply: total
+    _amount : Uint128 0
   };
   msg_to_sender = {
     _tag : "BatchMintCallBack";
     _recipient : _sender;
-    _amount : Uint128 0
+    _amount : Uint128 0;
+    total_supply: total
   };
   msgs = two_msgs msg_to_recipient msg_to_sender;
   send msgs
