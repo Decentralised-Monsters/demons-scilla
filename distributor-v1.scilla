@@ -45,6 +45,7 @@ let option_value =
 
 let option_uint256 = @option_value Uint256
 let option_uint128 = @option_value Uint128
+let option_uint32 = @option_value Uint32
 
 let to_256 =
   fun (v: Uint32) =>
@@ -107,6 +108,13 @@ let get_price =
     let some_amount = builtin to_uint128 amount in
       option_uint128 zero128 some_amount
 
+
+let get_count =
+  fun (a: Uint128) =>
+  fun (p: Uint128) =>
+    let value = builtin div a p in
+    let some_count = builtin to_uint32 value in
+      option_uint32 zero32 some_count
 (***************************************************)
 (*             The contract definition             *)
 (***************************************************)
@@ -119,7 +127,7 @@ contract BondingCurvedDistributor
 (* Mutable fields *)
 
 (* Total token count *)
-field total_reserve: Uint256 = zero256
+field reserve: Uint256 = zero256
 field total: Uint256 = zero256
 
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
@@ -154,19 +162,12 @@ procedure Minting(to: ByStr20, token_uris_list: List String)
 end
 
 procedure AddReserve(uri: String)
-  count_reserve <- total_reserve;
+  count_reserve <- reserve;
 
   new_count_reserve = builtin add count_reserve one256;
 
   tokens_reserve[new_count_reserve] := uri;
-  total_reserve := new_count_reserve;
-
-  e = {
-    _eventname: "AddedReserveToken";
-    total_reserve: new_count_reserve;
-    uri: uri
-  };
-  event e
+  reserve := new_count_reserve
 end
 
 
@@ -174,18 +175,21 @@ transition AddReserveList(token_uris_list: List String)
   forall token_uris_list AddReserve
 end
 
-transition Buy(total_supply: Uint256)
-  (* total_supply <- total; *)
+transition Buy()
+  total_supply <- total;
+  total_reserve <- reserve;
 
   b = get_pool_balance total_supply;
   price = get_price total_supply b;
-  value = builtin div _amount price;
+  count = get_count _amount price;
 
-  (* list = get_ids_list one32 count total; *)
+  list = get_ids_list one32 count total_reserve;
 
   e = {
     _eventname: "Test";
-    value: value
+    count: count;
+    price: price;
+    list: list
   };
   event e
 end
