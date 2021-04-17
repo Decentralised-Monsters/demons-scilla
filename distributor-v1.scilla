@@ -12,9 +12,7 @@ type Error =
   | CodeNotAuthorised
   | CodeNotMain
   | CodeInsufficientFunds
-
-type Dummy =
-  | Dummy
+  | CodeNotContractOwner
 
 let customization = Uint256 100000000000
 let exponent = Uint32 2
@@ -23,7 +21,6 @@ let zero128 = Uint128 0
 let zero32 = Uint32 0
 let one256 = Uint256 1
 let one32 = Uint32 1
-let verdad = Dummy
 let nil_str_list = Nil {String}
 
 let one_msg = 
@@ -38,6 +35,7 @@ let make_error =
       | CodeNotAuthorised     => Int32 -1
       | CodeNotMain           => Int32 -2
       | CodeInsufficientFunds => Int32 -3
+      | CodeNotContractOwner  => Int32 -4
       end
     in
     { _exception : "Error"; code : result_code }
@@ -132,6 +130,7 @@ let get_count =
 
 contract BondingCurvedDistributor
 (
+  contract_owner: ByStr20,
   demons: ByStr20
 )
 
@@ -148,6 +147,16 @@ field tmp_list: List String = nil_str_list
 procedure ThrowError(err : Error)
   e = make_error err;
   throw e
+end
+
+procedure IsContractOwner()
+  is_contract_owner = builtin eq contract_owner _sender;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotContractOwner;
+    ThrowError err
+  end
 end
 
 procedure IsMain()
