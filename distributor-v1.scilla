@@ -3,6 +3,7 @@ scilla_version 0
 (***************************************************)
 (*               Associated library                *)
 (***************************************************)
+import ListUtils
 
 library BondingCurvedDistributor
 
@@ -10,6 +11,10 @@ library BondingCurvedDistributor
 type Error =
   | CodeNotAuthorised
   | CodeNotMain
+  | CodeInsufficientFunds
+
+type Dummy =
+  | Dummy
 
 let customization = Uint256 100000000000
 let exponent = Uint32 2
@@ -18,6 +23,8 @@ let zero128 = Uint128 0
 let zero32 = Uint32 0
 let one256 = Uint256 1
 let one32 = Uint32 1
+let verdad = Dummy
+let nil_str_list = Nil {String}
 
 let one_msg = 
   fun (msg : Message) => 
@@ -28,8 +35,9 @@ let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotAuthorised    => Int32 -1
-      | CodeNotMain          => Int32 -2
+      | CodeNotAuthorised     => Int32 -1
+      | CodeNotMain           => Int32 -2
+      | CodeInsufficientFunds => Int32 -3
       end
     in
     { _exception : "Error"; code : result_code }
@@ -46,6 +54,7 @@ let option_value =
 let option_uint256 = @option_value Uint256
 let option_uint128 = @option_value Uint128
 let option_uint32 = @option_value Uint32
+let str_append = @list_append String
 
 let to_256 =
   fun (v: Uint32) =>
@@ -88,7 +97,8 @@ let get_pool_balance =
     let n = builtin add exponent one32 in
     let n256 = to_256 n in
     let mn = builtin div customization n256 in
-    let s_pow = builtin pow s n in
+    let ts = builtin add s one256 in
+    let s_pow = builtin pow ts n in
       builtin mul mn s_pow
 
 (* p = (customization / exponent + 1 (s + k) ** exponent + 1) - b *)
@@ -101,7 +111,8 @@ let get_price =
     let n256 = to_256 n in
     let mn = builtin div customization n256 in
     let k256 = to_256 one32 in
-    let sk = builtin add s k256 in
+    let ts = builtin add s one256 in
+    let sk = builtin add ts k256 in
     let sk_exp = builtin pow sk n in
     let value = builtin mul mn sk_exp in
     let amount = builtin sub value b in
@@ -131,6 +142,7 @@ field reserve: Uint256 = zero256
 field total: Uint256 = zero256
 
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
+field tmp_list: List String = nil_str_list
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -149,7 +161,8 @@ procedure IsMain()
   end
 end
 
-procedure Minting(to: ByStr20, token_uris_list: List String)
+procedure Minting(to: ByStr20)
+  token_uris_list <- tmp_list;
   msg_to_demons = {
     _tag: "BatchMint";
     _recipient: demons;
@@ -158,7 +171,8 @@ procedure Minting(to: ByStr20, token_uris_list: List String)
     token_uris_list: token_uris_list
   };
   msgs = one_msg msg_to_demons;
-  send msgs
+  send msgs;
+  tmp_list := nil_str_list
 end
 
 procedure AddReserve(uri: String)
@@ -168,6 +182,24 @@ procedure AddReserve(uri: String)
 
   tokens_reserve[new_count_reserve] := uri;
   reserve := new_count_reserve
+end
+
+procedure PutTmp(id: Uint256)
+  total_reserve <- reserve;
+  some_uri <- tokens_reserve[id];
+  tmp <- tmp_list;
+
+  match some_uri with
+  | Some uri =>
+    delete tokens_reserve[id];
+    new_item = Cons {String} uri nil_str_list;
+    new_tmp = str_append tmp new_item;
+    new_total_reserve = builtin sub total_reserve one256;
+
+    tmp_list := new_tmp;
+    reserve := new_total_reserve
+  | None =>
+  end
 end
 
 
@@ -182,16 +214,21 @@ transition Buy()
   b = get_pool_balance total_supply;
   price = get_price total_supply b;
   count = get_count _amount price;
+  is_zero = builtin eq count zero32;
 
-  list = get_ids_list one32 count total_reserve;
+  match is_zero with
+  | True =>
+    err = CodeInsufficientFunds;
+    ThrowError err
+  | False =>
+    list = get_ids_list zero32 count total_reserve;
 
-  e = {
-    _eventname: "Test";
-    count: count;
-    price: price;
-    list: list
-  };
-  event e
+    forall list PutTmp;
+
+    accept;
+
+    Minting _sender
+  end
 end
 
 (* callbacks *)
