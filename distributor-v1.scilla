@@ -213,6 +213,7 @@ end
 
 
 transition AddReserveList(token_uris_list: List String)
+  IsContractOwner;
   forall token_uris_list AddReserve
 end
 
