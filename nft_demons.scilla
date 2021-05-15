@@ -15,9 +15,13 @@ type Operation =
 | Sub
 
 (* Global variables *)
+let one_hundred256 = Uint256 100
 let zero = Uint256 0
 let one = Uint256 1
+
+let zero32 = Uint32 0
 let one32 = Uint32 1
+
 let dummy_str = ""
 let verdad = Dummy
 let add_operation = Add
@@ -46,6 +50,28 @@ let build_pair =
   fun (input_to_address : ByStr20) =>
   fun (input_token_uri : String) =>
     Pair {ByStr20 String} input_to_address input_token_uri
+
+let random =
+  fun (entropy: Uint256) =>
+  fun (block_number: BNum) =>
+  fun (addr: ByStr20) =>
+    let addr_hash = builtin keccak256hash addr in
+    let entropy_hash = builtin keccak256hash entropy in
+    let blockhash = builtin keccak256hash block_number in
+    let ehash = builtin concat entropy_hash blockhash in
+    let ahash = builtin concat ehash addr_hash in
+    let last_hash = builtin concat ehash ahash in
+    let hash = builtin keccak256hash last_hash in
+      builtin to_uint256 hash
+
+let get_gender =
+  fun (r: Uint256) =>
+    let n = builtin rem random one_hundred256 in
+    let is_half = builtin lt n fifty256 in
+      match is_half with
+      | True => zero32
+      | False => one32
+      end
 
 (* Error exception *)
 type Error =
@@ -102,6 +128,8 @@ field token_owners: Map Uint256 ByStr20 = Emp Uint256 ByStr20
 (* name of token *)
 field token_name: Map Uint256 String = Emp Uint256 String
 field token_lvl: Map Uint256 Uint32 = Emp Uint256 Uint32
+field token_gender: Map Uint256 Uint32 = Emp Uint256 Uint32
+field entropy : Uint256 = Uint256 0
 
 (* Mapping from owner to number of owned tokens *)
 field owned_token_count: Map ByStr20 Uint256 = Emp ByStr20 Uint256
@@ -275,8 +303,14 @@ procedure Minting(input_pair: Pair ByStr20 String)
   UpdateTokenCount add_operation to;
   (* Add to total_supply *)
   current_supply <- total_supply;
+  entropy_num <- entropy;
+  current_block <- & BLOCKNUMBER;
+
+  r = random entropyNumber current_block _sender;
+  gender = get_gender r;
   new_supply = builtin add current_supply one;
   total_supply := new_supply;
+  entropy := entropy;
   (* Initiate token_id and check if exists *)
   current_token_id_count <- token_id_count;
   new_token_id_count = builtin add current_token_id_count one;
@@ -289,6 +323,7 @@ procedure Minting(input_pair: Pair ByStr20 String)
   token_uris[token_id] := token_uri;
   token_name[token_id] := dummy_str;
   token_lvl[token_id] := one32;
+  token_gender[token_id] := gender;
   
   e = {_eventname: "MintSuccess"; by: _sender; recipient: to;
         token_id: token_id; token_uri: token_uri};
