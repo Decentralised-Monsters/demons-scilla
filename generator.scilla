@@ -1,0 +1,209 @@
+scilla_version 0
+
+(***************************************************)
+(*               Associated library                *)
+(***************************************************)
+import ListUtils
+
+library BondingCurvedDistributor
+
+(* Error events *)
+type Error =
+  | CodeNotAuthorised
+  | CodeNotMain
+  | CodeInsufficientFunds
+  | CodeNotContractOwner
+
+let customization = Uint256 100000000000
+let max_r = Uint256 100
+let five_ten = Uint256 50
+let exponent = Uint32 2
+let zero256 = Uint256 0
+let zero128 = Uint128 0
+let zero32 = Uint32 0
+let one256 = Uint256 1
+let one32 = Uint32 1
+let nil_str_list = Nil {String}
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+  Cons {Message} msg nil_msg
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeNotAuthorised     => Int32 -1
+      | CodeNotMain           => Int32 -2
+      | CodeInsufficientFunds => Int32 -3
+      | CodeNotContractOwner  => Int32 -4
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_uint256 = @option_value Uint256
+let option_uint128 = @option_value Uint128
+let option_uint32 = @option_value Uint32
+let str_append = @list_append String
+let str_sort = @list_sort String
+
+let to_256 =
+  fun (v: Uint32) =>
+    let v32 = builtin to_uint256 v in
+      option_uint256 zero256 v32
+
+let shuffle =
+  fun (a: String) =>
+  fun (b: String) =>
+    let l1 = builtin keccak256hash a in
+    let l2 = builtin keccak256hash b in
+    let hash = builtin concat l1 l2 in
+    let root = builtin keccak256hash hash in
+    let n = builtin to_uint256 root in
+    let nrem = builtin rem n max_r in
+      builtin lt nrem five_ten
+
+let get_ids_list =
+  fun (m : Uint32) =>
+  fun (n : Uint32) =>
+  fun (value : Uint256) =>
+    let m_lt_n = builtin lt m n in
+    match m_lt_n with
+    | True =>
+        let delta = builtin sub n m in
+        let delta_nat = builtin to_nat delta in
+        let nil = Nil {Uint256} in
+        let acc_init = Pair {(List Uint256) Uint32} nil n in
+        let step = fun (xs_n : Pair (List Uint256) Uint32) => fun (ignore : Nat) =>
+          match xs_n with
+          | Pair xs n =>
+              let new_n = builtin sub n one32 in
+              let some_new_value = builtin to_uint256 new_n in
+              let new_value = option_uint256 zero256 some_new_value in
+              let item = builtin sub value new_value in
+              let new_xs = Cons {Uint256} item xs in
+              Pair {(List Uint256) Uint32} new_xs new_n
+          end in
+        let fold = @nat_fold (Pair (List Uint256) Uint32) in
+        let xs_m = fold step acc_init delta_nat in
+        match xs_m with
+        | Pair xs m => xs
+        end
+    | False => Nil {Uint256}
+    end
+
+(* b = customization / exponent + 1 * s**(exponent + 1) *)
+(* s - total_supply *)
+let get_pool_balance =
+  fun (s: Uint256) =>
+    let n = builtin add exponent one32 in
+    let n256 = to_256 n in
+    let mn = builtin div customization n256 in
+    let ts = builtin add s one256 in
+    let s_pow = builtin pow ts n in
+      builtin mul mn s_pow
+
+(* p = (customization / exponent + 1 (s + k) ** exponent + 1) - b *)
+(* s - total_supply *)
+(* b - poolBalance *)
+let get_price =
+  fun (s: Uint256) =>
+  fun (b: Uint256) =>
+    let n = builtin add exponent one32 in
+    let n256 = to_256 n in
+    let mn = builtin div customization n256 in
+    let k256 = to_256 one32 in
+    let ts = builtin add s one256 in
+    let sk = builtin add ts k256 in
+    let sk_exp = builtin pow sk n in
+    let value = builtin mul mn sk_exp in
+    let amount = builtin sub value b in
+    let some_amount = builtin to_uint128 amount in
+      option_uint128 zero128 some_amount
+
+
+let get_count =
+  fun (a: Uint128) =>
+  fun (p: Uint128) =>
+    let value = builtin div a p in
+    let some_count = builtin to_uint32 value in
+      option_uint32 zero32 some_count
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+
+contract BondingCurvedDistributor
+(
+  contract_owner: ByStr20,
+  demons: ByStr20
+)
+
+(* Mutable fields *)
+
+(* Total token count *)
+field reserve: Uint256 = zero256
+field total: Uint256 = zero256
+
+field tokens_reserve: Map Uint256 String = Emp Uint256 String
+field tmp_list: List String = nil_str_list
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsContractOwner()
+  is_contract_owner = builtin eq contract_owner _sender;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotContractOwner;
+    ThrowError err
+  end
+end
+
+procedure AddReserve(uri: String)
+  count_reserve <- reserve;
+
+  new_count_reserve = builtin add count_reserve one256;
+
+  tokens_reserve[new_count_reserve] := uri;
+  reserve := new_count_reserve
+end
+
+
+transition AddReserveList(token_uris_list: List String)
+  IsContractOwner;
+  forall token_uris_list AddReserve
+end
+
+
+transition adding(token_uris_list: List String)
+  IsContractOwner;
+  tmp_list := token_uris_list
+end
+
+transition testSort(token_uris_list: List String)
+  IsContractOwner;
+  list <- tmp_list;
+
+  test = str_sort shuffle list;
+
+  e = {
+    _eventname: "Teset";
+    test: test
+  };
+  event e
+end
+
