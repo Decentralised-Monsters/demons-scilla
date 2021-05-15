@@ -18,6 +18,7 @@ type Operation =
 let one_hundred256 = Uint256 100
 let zero = Uint256 0
 let one = Uint256 1
+let fifty256 = Uint256 50
 
 let zero32 = Uint32 0
 let one32 = Uint32 1
@@ -66,7 +67,7 @@ let random =
 
 let get_gender =
   fun (r: Uint256) =>
-    let n = builtin rem random one_hundred256 in
+    let n = builtin rem r one_hundred256 in
     let is_half = builtin lt n fifty256 in
       match is_half with
       | True => zero32
@@ -303,14 +304,14 @@ procedure Minting(input_pair: Pair ByStr20 String)
   UpdateTokenCount add_operation to;
   (* Add to total_supply *)
   current_supply <- total_supply;
-  entropy_num <- entropy;
+  entropyNumber <- entropy;
   current_block <- & BLOCKNUMBER;
 
   r = random entropyNumber current_block _sender;
   gender = get_gender r;
   new_supply = builtin add current_supply one;
   total_supply := new_supply;
-  entropy := entropy;
+  entropy := r;
   (* Initiate token_id and check if exists *)
   current_token_id_count <- token_id_count;
   new_token_id_count = builtin add current_token_id_count one;
@@ -492,19 +493,19 @@ transition Transfer(to: ByStr20, token_id: Uint256)
   send msgs
 end
 
-transition SetName(token_id: Uint256, name: String)
+transition SetName(token_id: Uint256, new_name: String)
   IsTokenOwner token_id _sender;
 
-  token_name[token_name] := name;
+  token_name[token_id] := new_name;
 
   e = {
     _eventname: "NameChangeSuccess";
-    new_name: name
+    new_name: new_name
   };
   event e
 end
 
-transition ChangeLVL(value: Uint32)
+transition ChangeLVL(token_id: Uint256, value: Uint32)
   IsMinter _sender;
   token_lvl[token_id] := value;
 

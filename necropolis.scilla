@@ -13,6 +13,8 @@ type Error =
 let zero = Uint256 0
 let zero_address = 0x0000000000000000000000000000000000000000
 
+let zero128 = Uint128 0
+
 let one_msg = 
   fun (msg : Message) => 
     let nil_msg = Nil {Message} in
