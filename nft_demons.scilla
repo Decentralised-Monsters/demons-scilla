@@ -98,6 +98,9 @@ field minters: Map ByStr20 Dummy =
 (* Mapping between token_id to token_owner *)
 field token_owners: Map Uint256 ByStr20 = Emp Uint256 ByStr20
 
+(* name of token *)
+field token_name: Map Uint256 String = Emp Uint256 String
+
 (* Mapping from owner to number of owned tokens *)
 field owned_token_count: Map ByStr20 Uint256 = Emp ByStr20 Uint256
 
@@ -241,93 +244,7 @@ procedure UpdateTokenCount(operation: Operation, address: ByStr20)
   end
 end
 
-(* Getter transitions *)
 
-(* @dev: Get number of NFTs assigned to a token_owner *)
-transition BalanceOf(address: ByStr20)
-  some_bal <- owned_token_count[address];
-  balance = get_bal some_bal;
-  msg_to_sender = { _tag : "BalanceOfCallBack"; _recipient : _sender; _amount : Uint128 0;
-                   balance : balance};
-  msgs = one_msg msg_to_sender;
-  send msgs
-end
-
-(* @dev: Get total supply of NFTs minted *)
-transition TotalSupply()
-  current_supply <- total_supply;
-  msg_to_sender = { _tag : "TotalSupplyCallBack"; _recipient : _sender; _amount : Uint128 0;
-                   total_supply : current_supply};
-  msgs = one_msg msg_to_sender;
-  send msgs
-end
-
-(* @dev: Get name of the NFTs *)
-transition Name()
-  msg_to_sender = { _tag : "NameCallBack"; _recipient : _sender; _amount : Uint128 0;
-                   name : name};
-  msgs = one_msg msg_to_sender;
-  send msgs
-end
-
-(* @dev: Get name of the NFTs *)
-transition Symbol()
-  msg_to_sender = { _tag : "SymbolCallBack"; _recipient : _sender; _amount : Uint128 0;
-                   symbol : symbol};
-  msgs = one_msg msg_to_sender;
-  send msgs
-end
-
-(* @dev: Get approved_addr for token_id *)
-transition GetApproved(token_id: Uint256)
-  some_token_approval <- token_approvals[token_id];
-  match some_token_approval with
-  | Some addr => 
-    msg_to_sender = { _tag : "GetApprovedCallBack"; _recipient : _sender; _amount : Uint128 0; 
-                      approved_addr : addr; token_id : token_id};
-    msgs = one_msg msg_to_sender;
-    send msgs
-  | None => 
-    err = CodeNotApproved;
-    ThrowError err
-  end
-end
-
-(* @dev: Get the token_uri of a certain token_id *)
-transition GetTokenURI(token_id: Uint256)
-  some_token_uri <- token_uris[token_id];
-  match some_token_uri with
-  | Some token_uri =>
-    msg_to_sender = { _tag : "GetTokenURICallBack"; _recipient : _sender; _amount : Uint128 0; 
-                      token_uri : token_uri};
-    msgs = one_msg msg_to_sender;
-    send msgs
-  | None =>
-    err = CodeNotFound;
-    ThrowError err
-  end
-end
-
-(* @dev: Check if a token_id is owned by a token_owner *)
-transition CheckTokenOwner(token_id: Uint256, address: ByStr20)
-  IsTokenOwner token_id address;
-  msg_to_sender = { _tag : "IsTokenOwnerCallBack"; _recipient : _sender; _amount : Uint128 0};
-  msgs = one_msg msg_to_sender;
-  send msgs
-end
-
-(* @dev: Check if address is operator for token_owner *)
-transition CheckApprovedForAll(token_owner: ByStr20, operator: ByStr20)
-  IsApprovedForAll token_owner operator;
-  msg_to_sender = { _tag : "IsApprovedForAllCallBack"; _recipient : _sender; _amount : Uint128 0;
-                    token_owner : token_owner; operator : operator};
-  msgs = one_msg msg_to_sender;
-  send msgs
-end
-
-(* Interface transitions *)
-
-(* @dev:    Add or remove approved minters. Only contract_owner can approve minters. *)
 (* @param:  minter      - Address of the minter to be approved or removed            *)
 transition ConfigureMinter(minter: ByStr20)
   IsContractOwner;
@@ -414,7 +331,6 @@ transition BatchMint(to: ByStr20, token_uris_list: List String)
   send msgs
 end
 
-(* @dev:    Burn existing tokens. Only token_owner or an operator can burn a NFT. *)
 (* @param:  token_id - Unique ID of the NFT to be destroyed                       *)
 transition Burn(token_id: Uint256)
   (* Check if token exists *)
@@ -443,7 +359,6 @@ transition Burn(token_id: Uint256)
     send msgs
   end
 end
-
 
 (* @dev: Approves OR remove an address ability to transfer a given token_id *)
 (* There can only be one approved_spender per token at any given time       *)
@@ -535,6 +450,19 @@ transition Transfer(to: ByStr20, token_id: Uint256)
   msgs = two_msgs msg_to_recipient msg_to_sender;
   send msgs
 end
+
+transition SetName(token_id: Uint256, name: String)
+  IsTokenOwner token_id _sender;
+
+  token_name[token_name] := name;
+
+  e = {
+    _eventname: "NameChangeSuccess";
+    new_name: name
+  };
+  event e
+end
+
 
 (* @dev: Transfer the ownership of a given token_id to another address. approved_spender or operator only transition. *)
 (* @param: to       - Recipient address for the NFT                                                                   *)
