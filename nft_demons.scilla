@@ -129,7 +129,7 @@ field token_owners: Map Uint256 ByStr20 = Emp Uint256 ByStr20
 field token_name: Map Uint256 String = Emp Uint256 String
 field token_lvl: Map Uint256 Uint32 = Emp Uint256 Uint32
 field token_gender: Map Uint256 Uint32 = Emp Uint256 Uint32
-field entropy : Uint256 = Uint256 0
+field entropy : Uint256 = zero
 
 (* Mapping from owner to number of owned tokens *)
 field owned_token_count: Map ByStr20 Uint256 = Emp ByStr20 Uint256
@@ -146,10 +146,10 @@ field operator_approvals: Map ByStr20 (Map ByStr20 Dummy)
 field token_uris: Map Uint256 String = Emp Uint256 String
 
 (* Total token count *)
-field total_supply: Uint256 = Uint256 0
+field total_supply: Uint256 = zero
 
 (* Used token id *)
-field token_id_count: Uint256 = Uint256 0
+field token_id_count: Uint256 = zero
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)

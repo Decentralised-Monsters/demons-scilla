@@ -1,0 +1,130 @@
+scilla_version 0
+
+(***************************************************)
+(*               Associated library                *)
+(***************************************************)
+import PairUtils ListUtils
+library DemonsNecropolisLib
+
+type Error =
+  | CodeNotContractOwner
+  | CodeNotMain
+
+let zero = Uint256 0
+let zero_address = 0x0000000000000000000000000000000000000000
+
+let one_msg = 
+  fun (msg : Message) => 
+    let nil_msg = Nil {Message} in
+    Cons {Message} msg nil_msg
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeNotContractOwner => Int32 -1
+      | CodeNotMain          => Int32 -2
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+
+contract DemonsNecropolisContract
+(
+  contract_owner: ByStr20,
+  main: ByStr20 with contract
+    field token_owners: Map Uint256 ByStr20
+  end,
+  dmz: ByStr20 with contract
+    field balances: Map ByStr20 Uint128
+  end
+)
+
+(* 200 DMZ *)
+field rewards: Uint128 = Uint128 200000000000000000000
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsContractOwner()
+  is_contract_owner = builtin eq contract_owner _sender;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotContractOwner;
+    ThrowError err
+  end
+end
+
+procedure IsMain()
+  is_main = builtin eq main _sender;
+
+  match is_main with
+  | True =>
+  | False =>
+    err = CodeNotMain;
+    ThrowError err
+  end
+end
+
+procedure CallTransfer(to: ByStr20, amount: Uint128)
+  msg_transfer = {
+    _tag: "Transfer";
+    _recipient: dmz;
+    _amount: zero128;
+    to: to;
+    amount: amount
+  };
+  msgs = one_msg msg_transfer;
+  send msgs
+end
+
+procedure TransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
+  is_zero = builtin eq zero128 amount;
+
+  match is_zero with
+  | False =>
+    call_transfer_from = {
+      _tag: "TransferFrom";
+      _recipient: dmz;
+      _amount: Uint128 0;
+      from: from;
+      to: to;
+      amount: amount
+    };
+    msgs = one_msg call_transfer_from;
+    send msgs
+  | True =>
+  end
+end
+
+transition ChangeRewards(value: Uint128)
+  IsContractOwner;
+
+  rewards := value
+end
+
+transition Deposit(amount: Uint128)
+  TransferFrom amount _sender _this_address
+end
+
+(* calbacks *)
+transition RecipientAcceptTransfer(from: ByStr20, recipient: ByStr20, token_id: Uint256)
+  IsMain;
+
+  amount <- rewards;
+
+  CallTransfer from amount
+end
+
+transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+
+transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
