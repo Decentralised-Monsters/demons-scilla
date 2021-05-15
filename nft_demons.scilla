@@ -18,6 +18,7 @@ type Operation =
 let zero = Uint256 0
 let one = Uint256 1
 let one32 = Uint32 1
+let dummy_str = ""
 let verdad = Dummy
 let add_operation = Add
 let sub_operation = Sub
@@ -100,6 +101,7 @@ field token_owners: Map Uint256 ByStr20 = Emp Uint256 ByStr20
 
 (* name of token *)
 field token_name: Map Uint256 String = Emp Uint256 String
+field token_lvl: Map Uint256 Uint32 = Emp Uint256 Uint32
 
 (* Mapping from owner to number of owned tokens *)
 field owned_token_count: Map ByStr20 Uint256 = Emp ByStr20 Uint256
@@ -285,6 +287,8 @@ procedure Minting(input_pair: Pair ByStr20 String)
   token_owners[token_id] := to;
   (* Add token_uri for token_id *)
   token_uris[token_id] := token_uri;
+  token_name[token_id] := dummy_str;
+  token_lvl[token_id] := one32;
   
   e = {_eventname: "MintSuccess"; by: _sender; recipient: to;
         token_id: token_id; token_uri: token_uri};
@@ -345,6 +349,8 @@ transition Burn(token_id: Uint256)
     delete token_owners[token_id];
     delete token_approvals[token_id];
     delete token_uris[token_id];
+    delete token_name[token_id];
+    delete token_lvl[token_id];
     (* Deduct from owned_token_count *)
     UpdateTokenCount sub_operation token_owner;
     (* Deduct from total_supply *)
@@ -463,6 +469,16 @@ transition SetName(token_id: Uint256, name: String)
   event e
 end
 
+transition ChangeLVL(value: Uint32)
+  IsMinter _sender;
+  token_lvl[token_id] := value;
+
+  e = {
+    _eventname: "LevelUpgraded";
+    value: value
+  };
+  event e
+end
 
 (* @dev: Transfer the ownership of a given token_id to another address. approved_spender or operator only transition. *)
 (* @param: to       - Recipient address for the NFT                                                                   *)
