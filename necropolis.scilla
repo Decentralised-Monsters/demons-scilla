@@ -37,12 +37,8 @@ let make_error =
 contract DemonsNecropolisContract
 (
   contract_owner: ByStr20,
-  main: ByStr20 with contract
-    field token_owners: Map Uint256 ByStr20
-  end,
-  dmz: ByStr20 with contract
-    field balances: Map ByStr20 Uint128
-  end
+  main: ByStr20,
+  dmz: ByStr20
 )
 
 (* 200 DMZ *)

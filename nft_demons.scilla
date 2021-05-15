@@ -275,7 +275,6 @@ procedure UpdateTokenCount(operation: Operation, address: ByStr20)
   end
 end
 
-
 (* @param:  minter      - Address of the minter to be approved or removed            *)
 transition ConfigureMinter(minter: ByStr20)
   IsContractOwner;
@@ -364,8 +363,7 @@ transition BatchMint(to: ByStr20, token_uris_list: List String)
   msg_to_sender = {
     _tag : "BatchMintCallBack";
     _recipient : _sender;
-    _amount : Uint128 0;
-    total_supply: total
+    _amount : Uint128 0
   };
   msgs = two_msgs msg_to_recipient msg_to_sender;
   send msgs

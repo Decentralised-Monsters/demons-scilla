@@ -59,35 +59,6 @@ let to_256 =
     let v32 = builtin to_uint256 v in
       option_uint256 zero256 v32
 
-let get_ids_list =
-  fun (m : Uint32) =>
-  fun (n : Uint32) =>
-  fun (value : Uint256) =>
-    let m_lt_n = builtin lt m n in
-    match m_lt_n with
-    | True =>
-        let delta = builtin sub n m in
-        let delta_nat = builtin to_nat delta in
-        let nil = Nil {Uint256} in
-        let acc_init = Pair {(List Uint256) Uint32} nil n in
-        let step = fun (xs_n : Pair (List Uint256) Uint32) => fun (ignore : Nat) =>
-          match xs_n with
-          | Pair xs n =>
-              let new_n = builtin sub n one32 in
-              let some_new_value = builtin to_uint256 new_n in
-              let new_value = option_uint256 zero256 some_new_value in
-              let item = builtin sub value new_value in
-              let new_xs = Cons {Uint256} item xs in
-              Pair {(List Uint256) Uint32} new_xs new_n
-          end in
-        let fold = @nat_fold (Pair (List Uint256) Uint32) in
-        let xs_m = fold step acc_init delta_nat in
-        match xs_m with
-        | Pair xs m => xs
-        end
-    | False => Nil {Uint256}
-    end
-
 (* b = customization / exponent + 1 * s**(exponent + 1) *)
 (* s - total_supply *)
 let get_pool_balance =
@@ -131,7 +102,11 @@ let get_count =
 contract BondingCurvedDistributor
 (
   contract_owner: ByStr20,
-  demons: ByStr20
+  wallet: ByStr20,
+  dmz: ByStr20,
+  main: ByStr20 with contract
+    field token_id_count: Uint256
+  end
 )
 
 (* Mutable fields *)
@@ -140,8 +115,10 @@ contract BondingCurvedDistributor
 field reserve: Uint256 = zero256
 field total: Uint256 = zero256
 
+(* 20DMZ *)
+field rewards: Uint128 = Uint128 20000000000000000000
+
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
-field tmp_list: List String = nil_str_list
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -160,7 +137,7 @@ procedure IsContractOwner()
 end
 
 procedure IsMain()
-  is_main_contract = builtin eq demons _sender;
+  is_main_contract = builtin eq main _sender;
 
   match is_main_contract with
   | True =>
@@ -170,18 +147,50 @@ procedure IsMain()
   end
 end
 
-procedure Minting(to: ByStr20)
-  token_uris_list <- tmp_list;
-  msg_to_demons = {
-    _tag: "BatchMint";
-    _recipient: demons;
-    _amount: Uint128 0;
-    to: to;
-    token_uris_list: token_uris_list
+procedure AddFunds(recipient: ByStr20, amount: Uint128)
+  msg = {
+    _tag: "AddFunds";
+    _recipient: recipient;
+    _amount: amount
   };
-  msgs = one_msg msg_to_demons;
-  send msgs;
-  tmp_list := nil_str_list
+  msgs = one_msg msg;
+  send msgs
+end
+
+procedure CallTransfer(to: ByStr20, amount: Uint128)
+  msg_transfer = {
+    _tag: "Transfer";
+    _recipient: dmz;
+    _amount: zero128;
+    to: to;
+    amount: amount
+  };
+  msgs = one_msg msg_transfer;
+  send msgs
+end
+
+procedure Minting(to: ByStr20)
+  total_reserve <- reserve;
+  next_id <- total;
+  some_uri <- tokens_reserve[next_id];
+
+  match some_uri with
+  | Some uri =>
+    msg_to_demons = {
+      _tag: "Mint";
+      _recipient: main;
+      _amount: Uint128 0;
+      to: to;
+      token_uri: uri
+    };
+    msgs = one_msg msg_to_demons;
+    send msgs;
+    new_total_reserve = builtin sub total_reserve one256;
+
+    reserve := new_total_reserve;
+    delete tokens_reserve[next_id]
+  | None =>
+  end
 end
 
 procedure AddReserve(uri: String)
@@ -193,25 +202,6 @@ procedure AddReserve(uri: String)
   reserve := new_count_reserve
 end
 
-procedure PutTmp(id: Uint256)
-  total_reserve <- reserve;
-  some_uri <- tokens_reserve[id];
-  tmp <- tmp_list;
-
-  match some_uri with
-  | Some uri =>
-    delete tokens_reserve[id];
-    new_item = Cons {String} uri nil_str_list;
-    new_tmp = str_append tmp new_item;
-    new_total_reserve = builtin sub total_reserve one256;
-
-    tmp_list := new_tmp;
-    reserve := new_total_reserve
-  | None =>
-  end
-end
-
-
 transition AddReserveList(token_uris_list: List String)
   IsContractOwner;
   forall token_uris_list AddReserve
@@ -220,6 +210,7 @@ end
 transition Buy()
   total_supply <- total;
   total_reserve <- reserve;
+  amount_rewards <- rewards;
 
   b = get_pool_balance total_supply;
   price = get_price total_supply b;
@@ -231,26 +222,27 @@ transition Buy()
     err = CodeInsufficientFunds;
     ThrowError err
   | False =>
-    list = get_ids_list zero32 count total_reserve;
-
-    forall list PutTmp;
-
     accept;
 
+    CallTransfer _sender amount_rewards;
     Minting _sender
   end
 end
 
+transition ReturnFunds()
+  bal <- _balance;
+
+  AddFunds wallet bal
+end
+
 (* callbacks *)
-transition TotalSupplyCallBack(total_supply: Uint256)
-  IsMain;
+transition MintCallBack(recipient: ByStr20, token_id: Uint256, token_uri: String)
+  new_count <-& main.token_id_count;
 
-  total := total_supply
+  total := new_count
 end
 
-transition BatchMintCallBack(total_supply: Uint256)
-  IsMain;
-
-  total := total_supply
+transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
+
 (* callbacks *)
