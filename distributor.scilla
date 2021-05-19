@@ -136,6 +136,27 @@ procedure IsContractOwner()
   end
 end
 
+procedure IsMain()
+  is_main_contract = builtin eq main _sender;
+
+  match is_main_contract with
+  | True =>
+  | False =>
+    err = CodeNotMain;
+    ThrowError err
+  end
+end
+
+procedure AddFunds(recipient: ByStr20, amount: Uint128)
+  msg = {
+    _tag: "AddFunds";
+    _recipient: recipient;
+    _amount: amount
+  };
+  msgs = one_msg msg;
+  send msgs
+end
+
 procedure CallTransfer(to: ByStr20, amount: Uint128)
   msg_transfer = {
     _tag: "Transfer";
@@ -148,5 +169,82 @@ procedure CallTransfer(to: ByStr20, amount: Uint128)
   send msgs
 end
 
+procedure Minting(to: ByStr20)
+  total_reserve <- reserve;
+  next_id = builtin sub total_reserve one256;
+  some_uri <- tokens_reserve[next_id];
 
+  match some_uri with
+  | Some uri =>
+    msg_to_demons = {
+      _tag: "Mint";
+      _recipient: main;
+      _amount: Uint128 0;
+      to: to;
+      token_uri: uri
+    };
+    msgs = one_msg msg_to_demons;
+    send msgs;
+    new_total_reserve = builtin sub total_reserve one256;
+
+    reserve := new_total_reserve;
+    delete tokens_reserve[next_id]
+  | None =>
+  end
+end
+
+procedure AddReserve(uri: String)
+  count_reserve <- reserve;
+
+  new_count_reserve = builtin add count_reserve one256;
+
+  tokens_reserve[new_count_reserve] := uri;
+  reserve := new_count_reserve
+end
+
+transition AddReserveList(token_uris_list: List String)
+  IsContractOwner;
+  forall token_uris_list AddReserve
+end
+
+transition Buy()
+  total_supply <- total;
+  total_reserve <- reserve;
+  amount_rewards <- rewards;
+
+  b = get_pool_balance total_supply;
+  price = get_price total_supply b;
+  count = get_count _amount price;
+  is_zero = builtin eq count zero32;
+
+  match is_zero with
+  | True =>
+    err = CodeInsufficientFunds;
+    ThrowError err
+  | False =>
+    accept;
+
+    CallTransfer _sender amount_rewards;
+    Minting _sender
+  end
+end
+
+transition ReturnFunds()
+  bal <- _balance;
+
+  AddFunds wallet bal
+end
+
+(* callbacks *)
+transition MintCallBack(recipient: ByStr20, token_id: Uint256, token_uri: String)
+  new_count <-& main.token_id_count;
+
+  total := new_count
+end
+
+transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+
+transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
 (* callbacks *)
