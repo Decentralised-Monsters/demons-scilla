@@ -72,7 +72,7 @@ let option_value =
     | None => default
     end
   
-let option_uint256 = @option_value Uint256
+let option_uint32 = @option_value Uint32
 
 let build_pair =
   fun (input_to_address : ByStr20) =>
@@ -146,7 +146,7 @@ field token_name: Map Uint256 String = Emp Uint256 String
 field token_lvl: Map Uint256 Uint32 = Emp Uint256 Uint32
 field token_gender: Map Uint256 Uint32 = Emp Uint256 Uint32
 field entropy: Uint256 = zero
-field min_lvl_claim: Uint256 = Uint256 5
+field min_lvl_claim: Uint32 = Uint32 5
 
 (* Mapping from owner to number of owned tokens *)
 field owned_token_count: Map ByStr20 Uint256 = Emp ByStr20 Uint256
@@ -385,7 +385,7 @@ transition BatchMint(to: ByStr20, token_uris_list: List String)
   send msgs
 end
 
-transition SetMinLVL(value: Uint256)
+transition SetMinLVL(value: Uint32)
   IsContractOwner;
 
   min_lvl_claim := value
@@ -517,11 +517,11 @@ transition SetName(token_id: Uint256, new_name: String)
   IsTokenOwner token_id _sender;
   min_lvl <- min_lvl_claim;
   some_lvl <- token_lvl[token_id];
-  lvl = option_uint256 zero some_lvl;
-  can_change = builtin gt lvl min_lvl;
+  lvl = option_uint32 zero32 some_lvl;
+  can_change = builtin lt lvl min_lvl;
 
   match can_change with
-  | True =>
+  | False =>
     token_name[token_id] := new_name;
 
     e = {
@@ -529,7 +529,7 @@ transition SetName(token_id: Uint256, new_name: String)
       new_name: new_name
     };
     event e
-  | False =>
+  | True =>
     err = CodeMinLvl;
     ThrowError err
   end
