@@ -37,6 +37,7 @@ let fifty256 = Uint256 50
 
 let zero32 = Uint32 0
 let one32 = Uint32 1
+let min_lvl = Uint32 1000
 
 let dummy_str = ""
 let verdad = Dummy
@@ -146,7 +147,7 @@ field token_name: Map Uint256 String = Emp Uint256 String
 field token_lvl: Map Uint256 Uint32 = Emp Uint256 Uint32
 field token_gender: Map Uint256 Uint32 = Emp Uint256 Uint32
 field entropy: Uint256 = zero
-field min_lvl_claim: Uint32 = Uint32 5
+field min_lvl_claim: Uint32 = Uint32 5000
 
 (* Mapping from owner to number of owned tokens *)
 field owned_token_count: Map ByStr20 Uint256 = Emp ByStr20 Uint256
@@ -338,7 +339,7 @@ procedure Minting(input_pair: Pair ByStr20 String)
   (* Add token_uri for token_id *)
   token_uris[token_id] := token_uri;
   token_name[token_id] := dummy_str;
-  token_lvl[token_id] := one32;
+  token_lvl[token_id] := min_lvl;
   token_gender[token_id] := gender;
   
   e = {_eventname: "MintSuccess"; by: _sender; recipient: to;

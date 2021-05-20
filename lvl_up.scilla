@@ -2,31 +2,76 @@ scilla_version 0
 
 library LVLUpLib
 
+(* Error events *)
+type Error =
+| CodeNotOwner
+| CodeNotFound
+| CodeMaxLVL
+
+let decimals = Uint128 200000000000000000
+let one128 = Uint128 1
+let zero128 = Uint128 0
+
 let one_msg = 
   fun (msg : Message) => 
   let nil_msg = Nil {Message} in
   Cons {Message} msg nil_msg
 
-(* Error events *)
-type Error =
-| CodeNotOwner
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+  
+let option_128 = @option_value Uint128
+let option_32 = @option_value Uint32
+
+(* amount // DECIMAL + current_lvl *)
+let lvl_up =
+  fun (amount: Uint128) => 
+  fun (current_lvl: Uint32) =>
+    let some_lvl = builtin to_uint128 current_lvl in
+    let lvl = option_128 one128 some_lvl in
+    let value = builtin div amount decimals in
+    let next_lvl = builtin add value lvl in
+    let some_next_lvl = builtin to_uint32 next_lvl in
+      option_32 current_lvl some_next_lvl
+
+let check_max_lvl =
+  fun (lvl: Uint32) =>
+  fun (max: Uint32) =>
+    let is_max = builtin lt lvl max in
+      match is_max with
+      | True => lvl
+      | False => max
+      end
 
 let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotOwner              => Int32 -1
+      | CodeNotOwner => Int32 -1
+      | CodeNotFound => Int32 -2
+      | CodeMaxLVL   => Int32 -3
       end
     in
     { _exception : "Error"; code : result_code }
 
 contract LVLUpContract
 (
-  contract_owner: ByStr20
+  contract_owner: ByStr20,
+  wallet: ByStr20,
+  dmz: ByStr20,
+  main: ByStr20 with contract
+    field token_lvl: Map Uint256 Uint32
+  end
 )
 
 (* Mutable fields *)
-field max_lvl: Uint32 = Uint32 5
+field max_lvl: Uint32 = Uint32 5999
 
 (**************************************)
 (*             Procedures             *)
@@ -46,3 +91,54 @@ procedure IsOwner()
     ThrowError err
   end
 end
+
+procedure CallUpgrade(new_lvl: Uint32, token_id: Uint256)
+  msg_transfer = {
+    _tag: "ChangeLVL";
+    _recipient: main;
+    _amount: zero128;
+    token_id: token_id;
+    value: new_lvl
+  };
+  msgs = one_msg msg_transfer;
+  send msgs
+end
+
+procedure CallTransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
+  call_transfer_from = {
+    _tag: "TransferFrom";
+    _recipient: dmz;
+    _amount: Uint128 0;
+    from: from;
+    to: to;
+    amount: amount
+  };
+  msgs = one_msg call_transfer_from;
+  send msgs
+end
+
+transition Upgrade(amount: Uint128, token_id: Uint256)
+  some_current_lvl <-& main.token_lvl[token_id];
+
+  match some_current_lvl with
+  | Some current_lvl =>
+    max <- max_lvl;
+    is_max = builtin eq current_lvl max;
+
+    match is_max with
+    | True =>
+      err = CodeMaxLVL;
+      ThrowError err
+    | False =>
+      value = lvl_up amount current_lvl;
+      value = check_max_lvl value max;
+
+      CallTransferFrom amount _sender wallet;
+      CallUpgrade value token_id
+    end
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
