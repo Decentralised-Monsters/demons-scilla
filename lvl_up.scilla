@@ -1,0 +1,48 @@
+scilla_version 0
+
+library LVLUpLib
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+  Cons {Message} msg nil_msg
+
+(* Error events *)
+type Error =
+| CodeNotOwner
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeNotOwner              => Int32 -1
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+contract LVLUpContract
+(
+  contract_owner: ByStr20
+)
+
+(* Mutable fields *)
+field max_lvl: Uint32 = Uint32 5
+
+(**************************************)
+(*             Procedures             *)
+(**************************************)
+
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsOwner()
+  is_owner = builtin eq contract_owner _sender;
+  match is_owner with
+  | True =>
+  | False =>
+    err = CodeNotOwner;
+    ThrowError err
+  end
+end
