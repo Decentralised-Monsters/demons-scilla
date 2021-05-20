@@ -142,3 +142,17 @@ transition Upgrade(amount: Uint128, token_id: Uint256)
   end
 end
 
+transition SetMaxLVL(value: Uint32)
+  IsOwner;
+
+  max_lvl := value;
+
+  e = {
+    _eventname: "SetMaxLVLSuccess";
+    value: value
+  };
+  event e
+end
+
+transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
