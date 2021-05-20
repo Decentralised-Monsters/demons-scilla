@@ -14,6 +14,21 @@ type Operation =
 | Add
 | Sub
 
+
+(* Error exception *)
+type Error =
+| CodeNotContractOwner
+| CodeIsSelf
+| CodeTokenExists
+| CodeIsNotMinter
+| CodeNotApproved
+| CodeNotTokenOwner
+| CodeNotFound
+| CodeNotApprovedForAll
+| CodeNotOwnerOrOperator
+| CodeNotApprovedSpenderOrOperator
+| CodeMinLvl
+
 (* Global variables *)
 let one_hundred256 = Uint256 100
 let zero = Uint256 0
@@ -47,6 +62,18 @@ let get_bal =
     | None => zero
     end
 
+
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+  
+let option_uint256 = @option_value Uint256
+
 let build_pair =
   fun (input_to_address : ByStr20) =>
   fun (input_token_uri : String) =>
@@ -74,19 +101,6 @@ let get_gender =
       | False => one32
       end
 
-(* Error exception *)
-type Error =
-  | CodeNotContractOwner
-  | CodeIsSelf
-  | CodeTokenExists
-  | CodeIsNotMinter
-  | CodeNotApproved
-  | CodeNotTokenOwner
-  | CodeNotFound
-  | CodeNotApprovedForAll
-  | CodeNotOwnerOrOperator
-  | CodeNotApprovedSpenderOrOperator
-
 let make_error =
   fun (result : Error) =>
     let result_code = 
@@ -101,6 +115,7 @@ let make_error =
       | CodeNotApprovedForAll            => Int32 -8
       | CodeNotOwnerOrOperator           => Int32 -9
       | CodeNotApprovedSpenderOrOperator => Int32 -10
+      | CodeMinLvl                       => Int32 -11
       end
     in
     { _exception : "Error"; code : result_code }
@@ -130,7 +145,8 @@ field token_owners: Map Uint256 ByStr20 = Emp Uint256 ByStr20
 field token_name: Map Uint256 String = Emp Uint256 String
 field token_lvl: Map Uint256 Uint32 = Emp Uint256 Uint32
 field token_gender: Map Uint256 Uint32 = Emp Uint256 Uint32
-field entropy : Uint256 = zero
+field entropy: Uint256 = zero
+field min_lvl_claim: Uint256 = Uint256 5
 
 (* Mapping from owner to number of owned tokens *)
 field owned_token_count: Map ByStr20 Uint256 = Emp ByStr20 Uint256
@@ -369,6 +385,12 @@ transition BatchMint(to: ByStr20, token_uris_list: List String)
   send msgs
 end
 
+transition SetMinLVL(value: Uint256)
+  IsContractOwner;
+
+  min_lvl_claim := value
+end
+
 (* @param:  token_id - Unique ID of the NFT to be destroyed                       *)
 transition Burn(token_id: Uint256)
   (* Check if token exists *)
@@ -493,14 +515,24 @@ end
 
 transition SetName(token_id: Uint256, new_name: String)
   IsTokenOwner token_id _sender;
+  min_lvl <- min_lvl_claim;
+  some_lvl <- token_lvl[token_id];
+  lvl = option_uint256 zero some_lvl;
+  can_change = builtin gt lvl min_lvl;
 
-  token_name[token_id] := new_name;
+  match can_change with
+  | True =>
+    token_name[token_id] := new_name;
 
-  e = {
-    _eventname: "NameChangeSuccess";
-    new_name: new_name
-  };
-  event e
+    e = {
+      _eventname: "NameChangeSuccess";
+      new_name: new_name
+    };
+    event e
+  | False =>
+    err = CodeMinLvl;
+    ThrowError err
+  end
 end
 
 transition ChangeLVL(token_id: Uint256, value: Uint32)
