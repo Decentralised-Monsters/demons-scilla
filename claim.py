@@ -7,6 +7,9 @@ current_lvl = 5000
 max_lvl = 5999
 emissionPerDay = 1000000000000000000
 
+
+
+
 def claim():
   return current_lvl // 5000 * emissionPerDay
 

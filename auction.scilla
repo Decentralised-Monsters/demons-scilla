@@ -5,7 +5,7 @@ scilla_version 0
 (***************************************************)
 import ListUtils
 
-library BondingCurvedDistributor
+library AuctionLib
 
 (* Error events *)
 type Error =
@@ -42,7 +42,7 @@ let option_uint256 = @option_value Uint256
 (*             The contract definition             *)
 (***************************************************)
 
-contract BondingCurvedDistributor
+contract AuctionContract
 (
   contract_owner: ByStr20,
   wallet: ByStr20
