@@ -1,29 +1,55 @@
 scilla_version 0
 
-(***************************************************)
-(*               Associated library                *)
-(***************************************************)
-import ListUtils
+import BoolUtils
 
-library AuctionLib
+library AuctionFactoryLib
 
 (* Error events *)
 type Error =
-  | CodeNotContractOwner
+| CodeNotContractOwner
+| CodeBlockGap
+| CodeNotStartedYet
+| CodeAlreadyCanceled
+| CodeTimeOut
+| CodeIsOwner
+
+(* custom ADT owner, bidIncrement, startBlock, endBlock *)
+type StaticAuction =
+  | StaticAuction of ByStr20 Uint128 BNum BNum
+
+(* custom ADT canceled(0, 1), highestBindingBid, highestBidder, ownerHasWithdrawn(0, 1) *)
+type Auction =
+  | Auction of Bool Uint128 ByStr20 Bool StaticAuction
+
+
+let zero_address = 0x0000000000000000000000000000000000000000
 
 let zero256 = Uint256 0
 let zero128 = Uint128 0
+
+let one256 = Uint256 1
 
 let one_msg = 
   fun (msg : Message) => 
   let nil_msg = Nil {Message} in
   Cons {Message} msg nil_msg
 
+let blk_gte =
+  fun (blk1 : BNum) =>
+  fun (blk2 : BNum) =>
+    let bc1 = builtin blt blk2 blk1 in
+    let bc2 = builtin eq blk1 blk2 in
+      orb bc1 bc2
+
 let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
       | CodeNotContractOwner  => Int32 -1
+      | CodeBlockGap          => Int32 -2
+      | CodeNotStartedYet     => Int32 -3
+      | CodeAlreadyCanceled   => Int32 -4
+      | CodeTimeOut           => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
@@ -37,21 +63,30 @@ let option_value =
     | None => default
     end
 
-let option_uint256 = @option_value Uint256
+let option_uint128 = @option_value Uint128
+
+let auction_build =
+  fun (owner: ByStr20) =>
+  fun (increment: Uint128) =>
+  fun (start_block: BNum) =>
+  fun (end_block: BNum) =>
+    let s = StaticAuction owner increment start_block end_block in
+      Auction False zero128 zero_address False s
+
+
 (***************************************************)
 (*             The contract definition             *)
 (***************************************************)
 
-contract AuctionContract
+contract AuctionFactory
 (
   contract_owner: ByStr20,
   wallet: ByStr20
 )
 
 (* Mutable fields *)
-
-(* Total token count *)
-field reserve: Uint256 = zero256
+field funds_by_bidder: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field auctions: Map Uint256 Auction = Emp Uint256 Auction
 field total: Uint256 = zero256
 
 (* Emit Errors *)
@@ -70,3 +105,85 @@ procedure IsContractOwner()
   end
 end
 
+procedure OnlyAfterStart(start_block: BNum, current: BNum)
+  is_less = builtin lt current start_block;
+
+  match is_less with
+  | True =>
+    err = CodeNotStartedYet;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure OnlyBeforeEnd(end_block: BNum, current: BNum)
+  is_less = builtin lt end_block current;
+
+  match is_less with
+  | True =>
+    err = CodeTimeOut;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure OnlyNotCanceled(canceled: Bool)
+  match canceled with
+  | True =>
+    err = CodeAlreadyCanceled;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure OnlyNotOwner(owner: ByStr20)
+  is_owner builtin eq _sender owner;
+
+  match is_owner with
+  | True =>
+    err = CodeIsOwner;
+    ThrowError err
+  | False =>
+  end
+end
+
+
+procedure CheckStartBlock(start_block: BNum, end_block: BNum, current_block: BNum)
+  is_incorect = blk_gte start_block end_block;
+  is_less = builtin blt start_block current_block;
+  is_error = orb is_incorect is_less;
+
+  match is_error with
+  | True =>
+    err = CodeBlockGap;
+    ThrowError err
+  | False =>
+  end
+end
+
+transition CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: BNum)
+  current_block <-& BLOCKNUMBER;
+  total_ids <- total;
+
+  CheckStartBlock start_block end_block current_block;
+
+  next_id = builtin add total_ids one256;
+  new_auction = auction_build
+    _sender
+    bid_increment
+    start_block
+    end_block;
+
+  auctions[next_id] := new_auction;
+  total_ids := next_id;
+
+  e = {
+    _eventname: "AuctionCreated";
+    owner: _sender;
+    auction: new_auction
+  };
+  event e
+end
+
+transition PlaceBid(amount: Uint128)
+end
