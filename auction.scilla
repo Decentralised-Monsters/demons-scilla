@@ -13,12 +13,14 @@ type Error =
 | CodeTimeOut
 | CodeIsOwner
 | CodeInsufficientAmount
+| CodeBipLessThanCurrent
+| CodeNotFound
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock *)
 type StaticAuction =
   | StaticAuction of ByStr20 Uint128 BNum BNum
 
-(* custom ADT canceled(0, 1), highestBindingBid, highestBidder, ownerHasWithdrawn(0, 1) *)
+(* custom ADT canceled(0, 1), highestBindingBid, highestBidder, ownerHasWithdrawn(0, 1), static *)
 type Auction =
   | Auction of Bool Uint128 ByStr20 Bool StaticAuction
 
@@ -29,6 +31,7 @@ let zero256 = Uint256 0
 let zero128 = Uint128 0
 
 let one256 = Uint256 1
+let ff = False
 
 let one_msg = 
   fun (msg : Message) => 
@@ -52,6 +55,9 @@ let make_error =
       | CodeAlreadyCanceled    => Int32 -4
       | CodeTimeOut            => Int32 -5
       | CodeInsufficientAmount => Int32 -6
+      | CodeBipLessThanCurrent => Int32 -7
+      | CodeNotFound           => Int32 -8
+      | CodeIsOwner            => Int32 -9
       end
     in
     { _exception : "Error"; code : result_code }
@@ -73,7 +79,7 @@ let auction_build =
   fun (start_block: BNum) =>
   fun (end_block: BNum) =>
     let s = StaticAuction owner increment start_block end_block in
-      Auction False zero128 zero_address False s
+      Auction ff zero128 zero_address ff s
 
 
 (***************************************************)
@@ -109,7 +115,7 @@ procedure IsContractOwner()
 end
 
 procedure OnlyAfterStart(start_block: BNum, current: BNum)
-  is_less = builtin lt current start_block;
+  is_less = builtin blt current start_block;
 
   match is_less with
   | True =>
@@ -120,7 +126,7 @@ procedure OnlyAfterStart(start_block: BNum, current: BNum)
 end
 
 procedure OnlyBeforeEnd(end_block: BNum, current: BNum)
-  is_less = builtin lt end_block current;
+  is_less = builtin blt end_block current;
 
   match is_less with
   | True =>
@@ -140,11 +146,26 @@ procedure OnlyNotCanceled(canceled: Bool)
 end
 
 procedure OnlyNotOwner(owner: ByStr20)
-  is_owner builtin eq _sender owner;
+  is_owner = builtin eq _sender owner;
 
   match is_owner with
   | True =>
     err = CodeIsOwner;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure CheckBipAmount(bid: Uint128, highest_binding_bid: Uint128)
+  (* if the user isn't even willing to overbid the highest binding bid, there's nothing for us *)
+  (* to do except revert the transaction. *)
+  is_less = builtin lt bid highest_binding_bid;
+  is_equal = builtin eq bid highest_binding_bid;
+  is_revert = orb is_less is_equal;
+
+  match is_revert with
+  | True =>
+    err = CodeBipLessThanCurrent;
     ThrowError err
   | False =>
   end
@@ -199,7 +220,7 @@ transition CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: B
     end_block;
 
   auctions[next_id] := new_auction;
-  total_ids := next_id;
+  total := next_id;
 
   e = {
     _eventname: "AuctionCreated";
@@ -209,6 +230,32 @@ transition CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: B
   event e
 end
 
-transition PlaceBid(amount: Uint128)
-  CallTransferFrom amount _sender _this_address;
+transition PlaceBid(amount: Uint128, id: Uint256)
+  current_block <-& BLOCKNUMBER;
+  some_current_bid <- funds_by_bidder[_sender];
+  some_auction <- auctions[id];
+
+  (* calculate the user's total bid based on the current amount they've sent to the contract *)
+  (* plus whatever has been sent with this transaction *)
+  current_bid = option_uint128 zero128 some_current_bid;
+  new_bid = builtin add current_bid amount;
+
+  match some_auction with
+  | Some auction =>
+    match auction with
+    | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
+      OnlyNotCanceled canceled;
+      match static with
+      | StaticAuction owner bid_increment start_block end_block =>
+        OnlyAfterStart start_block current_block;
+        OnlyBeforeEnd end_block current_block;
+        OnlyNotOwner owner;
+        CheckBipAmount new_bid highest_binding_bid;
+        CallTransferFrom amount _sender _this_address
+      end
+    end
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
 end
