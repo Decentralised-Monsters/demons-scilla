@@ -111,7 +111,9 @@ contract AuctionFactory
 )
 
 (* Mutable fields *)
-field funds_by_bidder: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128) 
+  = Emp ByStr20 (Map Uint256 Uint128)
+
 field auctions: Map Uint256 Auction = Emp Uint256 Auction
 field total: Uint256 = zero256
 
@@ -258,7 +260,7 @@ end
 
 transition PlaceBid(amount: Uint128, id: Uint256)
   current_block <-& BLOCKNUMBER;
-  some_current_bid <- funds_by_bidder[_sender];
+  some_current_bid <- funds_by_bidder[_sender][id];
   some_auction <- auctions[id];
   (* calculate the user's total bid based on the current amount they've sent to the contract *)
   (* plus whatever has been sent with this transaction *)
@@ -272,7 +274,7 @@ transition PlaceBid(amount: Uint128, id: Uint256)
       OnlyNotCanceled canceled;
       (* grab the previous highest bid (before updating fundsByBidder, in case _sender is the *)
       (* highestBidder and is just increasing their maximum bid). *)
-      some_highest_bid <- funds_by_bidder[highest_bidder];
+      some_highest_bid <- funds_by_bidder[highest_bidder][id];
       highest_bid = option_uint128 zero128 some_highest_bid;
       match static with
       | StaticAuction owner bid_increment start_block end_block =>
@@ -289,6 +291,7 @@ transition PlaceBid(amount: Uint128, id: Uint256)
         is_less = builtin lt new_bid highest_bid;
         is_eq = builtin eq new_bid highest_bid;
         is_overbid = orb is_less is_eq;
+        funds_by_bidder[_sender][id] := new_bid;
 
         match is_overbid with
         | True =>
@@ -319,4 +322,7 @@ transition PlaceBid(amount: Uint128, id: Uint256)
     err = CodeNotFound;
     ThrowError err
   end
+end
+
+transition CancelAuction()
 end
