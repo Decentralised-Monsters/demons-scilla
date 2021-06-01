@@ -15,6 +15,7 @@ type Error =
 | CodeInsufficientAmount
 | CodeBipLessThanCurrent
 | CodeNotFound
+| CodeNotEndedOrCanceled
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock *)
 type StaticAuction =
@@ -67,6 +68,7 @@ let make_error =
       | CodeBipLessThanCurrent => Int32 -7
       | CodeNotFound           => Int32 -8
       | CodeIsOwner            => Int32 -9
+      | CodeNotEndedOrCanceled => Int32 -10
       end
     in
     { _exception : "Error"; code : result_code }
@@ -175,6 +177,19 @@ procedure OnlyBeforeEnd(end_block: BNum, current: BNum)
   end
 end
 
+procedure OnlyEndedOrCanceled(canceled: Bool, end_block: BNum, current: BNum)
+  is_less = builtin blt current end_block;
+  neg_canceled = negb canceled;
+  is_reject = andb is_less neg_canceled;
+
+  match is_reject with
+  | True =>
+    err = CodeNotEndedOrCanceled;
+    ThrowError err
+  | False =>
+  end
+end
+
 procedure OnlyNotCanceled(canceled: Bool)
   match canceled with
   | True =>
@@ -242,6 +257,27 @@ procedure CheckStartBlock(start_block: BNum, end_block: BNum, current_block: BNu
     ThrowError err
   | False =>
   end
+end
+
+procedure CallTransfer(to: ByStr20, amount: Uint128)
+  msg_transfer = {
+    _tag: "Transfer";
+    _recipient: dmz;
+    _amount: zero128;
+    to: to;
+    amount: amount
+  };
+  msgs = one_msg msg_transfer;
+  send msgs
+end
+
+procedure ReturnFunds(id: Uint256, to: ByStr20)
+  some_amount <- funds_by_bidder[to][id];
+  amount = option_uint128 zero128 some_amount;
+
+  delete funds_by_bidder[to][id];
+
+  CallTransfer to amount
 end
 
 
@@ -358,6 +394,58 @@ transition CancelAuction(id: Uint256)
           id: id
         };
         event e
+      end
+    end
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
+transition Withdraw(id: Uint256)
+  current_block <-& BLOCKNUMBER;
+  some_auction <- auctions[id];
+
+  match some_auction with
+  | Some auction =>
+    match auction with
+    | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
+      match static with
+      | StaticAuction owner bid_increment start_block end_block =>
+        OnlyEndedOrCanceled canceled end_block current_block;
+
+        match canceled with
+        | True =>
+          (* if the auction was canceled, everyone should simply be allowed to withdraw their funds *)
+          ReturnFunds id _sender
+        | False =>
+          (* the auction finished without being canceled *)
+          is_owner = builtin eq owner _sender;
+          match is_owner with
+          | True =>
+            (* the auction's owner should be allowed to withdraw the highestBindingBid *)
+            new_owner_has_withdrawn = True;
+            new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
+            auctions[id] := new_auction;
+
+            delete funds_by_bidder[highest_bidder][id];
+
+            CallTransfer owner highest_binding_bid
+          | False =>
+            is_highest_bidder = builtin eq highest_bidder _sender;
+
+            match is_highest_bidder with
+            | True =>
+              (* the highest bidder should only be allowed to withdraw the difference between their *)
+              (* highest bid and the highestBindingBid *)
+              (* TODO: make logic for transfer token *)
+            | False =>
+              (* anyone who participated but did not win the auction should be allowed to withdraw *)
+              (* the full amount of their funds *)
+              ReturnFunds id _sender
+            end
+          end
+        end
       end
     end
   | None =>
