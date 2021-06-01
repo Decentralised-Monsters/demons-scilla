@@ -142,6 +142,17 @@ procedure EmitBidEvent(highest_binding_bid: Uint128, highest_bidder: ByStr20)
   event e
 end
 
+procedure OnlyOwner(owner: ByStr20)
+  is_owner = builtin eq _sender owner;
+
+  match is_owner with
+  | True =>
+    err = CodeIsOwner;
+    ThrowError err
+  | False =>
+  end
+end
+
 procedure OnlyAfterStart(start_block: BNum, current: BNum)
   is_less = builtin blt current start_block;
 
@@ -324,5 +335,33 @@ transition PlaceBid(amount: Uint128, id: Uint256)
   end
 end
 
-transition CancelAuction()
+transition CancelAuction(id: Uint256)
+  current_block <-& BLOCKNUMBER;
+  some_auction <- auctions[id];
+
+  match some_auction with
+  | Some auction =>
+    match auction with
+    | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
+      OnlyNotCanceled canceled;
+      match static with
+      | StaticAuction owner bid_increment start_block end_block =>
+        OnlyOwner owner;
+        OnlyBeforeEnd end_block current_block;
+
+        new_canceled = True;
+        new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
+        auctions[id] := new_auction;
+
+        e = {
+          _eventname: "CanceledEventSuccess";
+          id: id
+        };
+        event e
+      end
+    end
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
 end
