@@ -17,9 +17,9 @@ type Error =
 | CodeNotFound
 | CodeNotEndedOrCanceled
 
-(* custom ADT owner, bidIncrement, startBlock, endBlock *)
+(* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
-  | StaticAuction of ByStr20 Uint128 BNum BNum
+  | StaticAuction of ByStr20 Uint128 BNum BNum Uint256
 
 (* custom ADT canceled, highestBindingBid, highestBidder, ownerHasWithdrawn, static *)
 type Auction =
@@ -89,7 +89,14 @@ let auction_build =
   fun (increment: Uint128) =>
   fun (start_block: BNum) =>
   fun (end_block: BNum) =>
-    let s = StaticAuction owner increment start_block end_block in
+  fun (token_id: Uint256) =>
+    let s = StaticAuction
+      owner
+      increment
+      start_block
+      end_block
+      token_id
+    in
       Auction ff zero128 zero_address ff s
 
 let min = 
@@ -109,7 +116,8 @@ contract AuctionFactory
 (
   contract_owner: ByStr20,
   wallet: ByStr20,
-  dmz: ByStr20
+  dmz: ByStr20,
+  main: ByStr20
 )
 
 (* Mutable fields *)
@@ -280,8 +288,32 @@ procedure ReturnFunds(id: Uint256, to: ByStr20)
   CallTransfer to amount
 end
 
+procedure TransferFromNFT(to: ByStr20, token_id: Uint256)
+  transfered = {
+    _tag: "TransferFrom";
+    _recipient: main;
+    _amount: Uint128 0;
+    to: to;
+    token_id: token_id
+  };
+  msgs = one_msg transfered;
+  send msgs
+end
 
-transition CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: BNum)
+procedure TransferNFT(to: ByStr20, token_id: Uint256)
+  transfered = {
+    _tag: "Transfer";
+    _recipient: main;
+    _amount: Uint128 0;
+    to: to;
+    token_id: token_id
+  };
+  msgs = one_msg transfered;
+  send msgs
+end
+
+
+transition CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
   current_block <-& BLOCKNUMBER;
   total_ids <- total;
 
@@ -292,10 +324,13 @@ transition CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: B
     _sender
     bid_increment
     start_block
-    end_block;
+    end_block
+    token_id;
 
   auctions[next_id] := new_auction;
   total := next_id;
+
+  TransferFromNFT _this_address token_id;
 
   e = {
     _eventname: "AuctionCreated";
@@ -324,7 +359,7 @@ transition PlaceBid(amount: Uint128, id: Uint256)
       some_highest_bid <- funds_by_bidder[highest_bidder][id];
       highest_bid = option_uint128 zero128 some_highest_bid;
       match static with
-      | StaticAuction owner bid_increment start_block end_block =>
+      | StaticAuction owner bid_increment start_block end_block token_id =>
         OnlyAfterStart start_block current_block;
         OnlyBeforeEnd end_block current_block;
         OnlyNotOwner owner;
@@ -381,7 +416,7 @@ transition CancelAuction(id: Uint256)
     | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
       OnlyNotCanceled canceled;
       match static with
-      | StaticAuction owner bid_increment start_block end_block =>
+      | StaticAuction owner bid_increment start_block end_block token_id =>
         OnlyOwner owner;
         OnlyBeforeEnd end_block current_block;
 
@@ -389,6 +424,7 @@ transition CancelAuction(id: Uint256)
         new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
         auctions[id] := new_auction;
 
+        TransferNFT _sender token_id;
         e = {
           _eventname: "CanceledEventSuccess";
           id: id
@@ -411,7 +447,7 @@ transition Withdraw(id: Uint256)
     match auction with
     | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
       match static with
-      | StaticAuction owner bid_increment start_block end_block =>
+      | StaticAuction owner bid_increment start_block end_block token_id =>
         OnlyEndedOrCanceled canceled end_block current_block;
 
         match canceled with
@@ -438,7 +474,7 @@ transition Withdraw(id: Uint256)
             | True =>
               (* the highest bidder should only be allowed to withdraw the difference between their *)
               (* highest bid and the highestBindingBid *)
-              (* TODO: make logic for transfer token *)
+              TransferNFT _sender token_id
             | False =>
               (* anyone who participated but did not win the auction should be allowed to withdraw *)
               (* the full amount of their funds *)
