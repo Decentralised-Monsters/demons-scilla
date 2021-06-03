@@ -472,3 +472,6 @@ end
 
 transition TransferFromSuccessCallBack(from: ByStr20, recipient: ByStr20, token_id: Uint256)
 end
+
+transition TransferSuccessCallBack(from: ByStr20, recipient: ByStr20, token_id: Uint256)
+end
