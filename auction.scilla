@@ -32,6 +32,7 @@ let zero_address = 0x0000000000000000000000000000000000000000
 let zero256 = Uint256 0
 let zero128 = Uint128 0
 
+let one_hundred128 = Uint128 100
 let one256 = Uint256 1
 let ff = False
 
@@ -462,6 +463,7 @@ end
 transition Withdraw(id: Uint256)
   current_block <-& BLOCKNUMBER;
   some_auction <- auctions[id];
+  dev_commission <- commission;
 
   match some_auction with
   | Some auction =>
@@ -486,7 +488,12 @@ transition Withdraw(id: Uint256)
 
             delete funds_by_bidder[highest_bidder][id];
 
-            AddFunds owner highest_binding_bid
+            com = builtin mul dev_commission highest_binding_bid;
+            com = builtin div com one_hundred128;
+            value = builtin sub highest_binding_bid com;
+
+            AddFunds owner value;
+            AddFunds wallet com
           | False =>
             is_highest_bidder = builtin eq highest_bidder _sender;
 
