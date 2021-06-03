@@ -444,7 +444,7 @@ transition CancelAuction(id: Uint256)
 
         new_canceled = True;
         new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
-        auctions[id] := new_auction
+        auctions[id] := new_auction;
         e = {
           _eventname: "CanceledEventSuccess";
           id: id
@@ -533,7 +533,6 @@ transition SetCommission(value: Uint128)
   };
   event e
 end
-
 
 
 (*Empty callbacks*)
