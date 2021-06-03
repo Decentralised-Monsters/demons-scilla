@@ -479,16 +479,18 @@ transition Withdraw(id: Uint256)
           is_owner = builtin eq owner _sender;
           match is_owner with
           | True =>
+            some_bid_amount <- funds_by_bidder[highest_bidder][id];
             (* the auction's owner should be allowed to withdraw the highestBindingBid *)
             new_owner_has_withdrawn = True;
             new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
             auctions[id] := new_auction;
 
-            delete funds_by_bidder[highest_bidder][id];
-
-            com = builtin mul dev_commission highest_binding_bid;
+            amount = option_uint128 zero128 some_bid_amount;
+            com = builtin mul dev_commission amount;
             com = builtin div com one_hundred128;
-            value = builtin sub highest_binding_bid com;
+            value = builtin sub amount com;
+
+            delete funds_by_bidder[highest_bidder][id];
 
             AddFunds owner value;
             AddFunds wallet com
