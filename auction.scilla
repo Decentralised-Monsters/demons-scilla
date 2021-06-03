@@ -116,7 +116,6 @@ contract AuctionFactory
 (
   contract_owner: ByStr20,
   wallet: ByStr20,
-  dmz: ByStr20,
   main: ByStr20
 )
 
@@ -157,9 +156,9 @@ procedure OnlyOwner(owner: ByStr20)
 
   match is_owner with
   | True =>
+  | False =>
     err = CodeIsOwner;
     ThrowError err
-  | False =>
   end
 end
 
@@ -233,27 +232,6 @@ procedure CheckBipAmount(bid: Uint128, highest_binding_bid: Uint128)
   end
 end
 
-procedure CallTransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
-  is_zero = builtin eq zero128 amount;
-
-  match is_zero with
-  | False =>
-    call_transfer_from = {
-      _tag: "TransferFrom";
-      _recipient: dmz;
-      _amount: Uint128 0;
-      from: from;
-      to: to;
-      amount: amount
-    };
-    msgs = one_msg call_transfer_from;
-    send msgs
-  | True =>
-    err = CodeInsufficientAmount;
-    ThrowError err
-  end
-end
-
 procedure CheckStartBlock(start_block: BNum, end_block: BNum, current_block: BNum)
   is_incorect = blk_gte start_block end_block;
   is_less = builtin blt start_block current_block;
@@ -267,15 +245,13 @@ procedure CheckStartBlock(start_block: BNum, end_block: BNum, current_block: BNu
   end
 end
 
-procedure CallTransfer(to: ByStr20, amount: Uint128)
-  msg_transfer = {
-    _tag: "Transfer";
-    _recipient: dmz;
-    _amount: zero128;
-    to: to;
-    amount: amount
+procedure AddFunds(recipient: ByStr20, amount: Uint128)
+  msg = {
+    _tag: "AddFunds";
+    _recipient: recipient;
+    _amount: amount
   };
-  msgs = one_msg msg_transfer;
+  msgs = one_msg msg;
   send msgs
 end
 
@@ -285,7 +261,7 @@ procedure ReturnFunds(id: Uint256, to: ByStr20)
 
   delete funds_by_bidder[to][id];
 
-  CallTransfer to amount
+  AddFunds to amount
 end
 
 procedure TransferFromNFT(to: ByStr20, token_id: Uint256)
@@ -340,14 +316,14 @@ transition CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: B
   event e
 end
 
-transition PlaceBid(amount: Uint128, id: Uint256)
+transition PlaceBid(id: Uint256)
   current_block <-& BLOCKNUMBER;
   some_current_bid <- funds_by_bidder[_sender][id];
   some_auction <- auctions[id];
   (* calculate the user's total bid based on the current amount they've sent to the contract *)
   (* plus whatever has been sent with this transaction *)
   current_bid = option_uint128 zero128 some_current_bid;
-  new_bid = builtin add current_bid amount;
+  new_bid = builtin add current_bid _amount;
 
   match some_auction with
   | Some auction =>
@@ -364,8 +340,7 @@ transition PlaceBid(amount: Uint128, id: Uint256)
         OnlyBeforeEnd end_block current_block;
         OnlyNotOwner owner;
         CheckBipAmount new_bid highest_binding_bid;
-        CallTransferFrom amount _sender _this_address;
-
+        accept;
         (* if the user has overbid the highestBindingBid but not the highestBid, we simply *)
         (* increase the highestBindingBid and leave highestBidder alone. *)
         (* note that this case is impossible if _sender == highestBidder because you can never *)
@@ -466,7 +441,7 @@ transition Withdraw(id: Uint256)
 
             delete funds_by_bidder[highest_bidder][id];
 
-            CallTransfer owner highest_binding_bid
+            AddFunds owner highest_binding_bid
           | False =>
             is_highest_bidder = builtin eq highest_bidder _sender;
 
