@@ -12,7 +12,6 @@ type Error =
 | CodeAlreadyCanceled
 | CodeTimeOut
 | CodeIsOwner
-| CodeInsufficientAmount
 | CodeBipLessThanCurrent
 | CodeNotFound
 | CodeNotEndedOrCanceled
@@ -66,12 +65,11 @@ let make_error =
       | CodeNotStartedYet      => Int32 -3
       | CodeAlreadyCanceled    => Int32 -4
       | CodeTimeOut            => Int32 -5
-      | CodeInsufficientAmount => Int32 -6
-      | CodeBipLessThanCurrent => Int32 -7
-      | CodeNotFound           => Int32 -8
-      | CodeIsOwner            => Int32 -9
-      | CodeNotEndedOrCanceled => Int32 -10
-      | CodeOnlyWithdrawn      => Int32 -11
+      | CodeBipLessThanCurrent => Int32 -6
+      | CodeNotFound           => Int32 -7
+      | CodeIsOwner            => Int32 -8
+      | CodeNotEndedOrCanceled => Int32 -9
+      | CodeOnlyWithdrawn      => Int32 -10
       end
     in
     { _exception : "Error"; code : result_code }
