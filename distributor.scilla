@@ -45,6 +45,7 @@ let option_uint256 = @option_value Uint256
 contract BondingCurvedDistributor
 (
   contract_owner: ByStr20,
+  distributor: ByStr20,
   wallet: ByStr20
 )
 

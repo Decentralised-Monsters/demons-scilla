@@ -18,9 +18,9 @@ let customization = Uint256 100000000000
 let exponent = Uint32 2
 let zero256 = Uint256 0
 let zero128 = Uint128 0
-let zero32 = Uint32 0
 let one256 = Uint256 1
 let one32 = Uint32 1
+let one128 = Uint128 1
 let nil_str_list = Nil {String}
 
 let one_msg = 
@@ -88,13 +88,22 @@ let get_price =
     let some_amount = builtin to_uint128 amount in
       option_uint128 zero128 some_amount
 
-
 let get_count =
   fun (a: Uint128) =>
   fun (p: Uint128) =>
-    let value = builtin div a p in
-    let some_count = builtin to_uint32 value in
-      option_uint32 zero32 some_count
+    builtin div a p
+
+let change_of_coins =
+  fun (count: Uint128) =>
+  fun (price: Uint128) =>
+  fun (amount: Uint128) =>
+    let is_one = builtin eq count one128 in
+      match is_one with
+      | True => zero128
+      | False =>
+        builtin sub amount price
+      end
+
 (***************************************************)
 (*             The contract definition             *)
 (***************************************************)
@@ -103,7 +112,7 @@ contract BondingCurvedDistributor
 (
   contract_owner: ByStr20,
   wallet: ByStr20,
-  dmz: ByStr20,
+  distributor: ByStr20,
   main: ByStr20 with contract
     field token_id_count: Uint256
   end
@@ -114,9 +123,6 @@ contract BondingCurvedDistributor
 (* Total token count *)
 field reserve: Uint256 = zero256
 field total: Uint256 = zero256
-
-(* 20DMZ *)
-field rewards: Uint128 = Uint128 20000000000000000000
 
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
 
@@ -148,25 +154,19 @@ procedure IsMain()
 end
 
 procedure AddFunds(recipient: ByStr20, amount: Uint128)
-  msg = {
-    _tag: "AddFunds";
-    _recipient: recipient;
-    _amount: amount
-  };
-  msgs = one_msg msg;
-  send msgs
-end
+  is_zero = builtin eq amount zero128;
 
-procedure CallTransfer(to: ByStr20, amount: Uint128)
-  msg_transfer = {
-    _tag: "Transfer";
-    _recipient: dmz;
-    _amount: zero128;
-    to: to;
-    amount: amount
-  };
-  msgs = one_msg msg_transfer;
-  send msgs
+  match is_zero with
+  | False =>
+    msg = {
+      _tag: "AddFunds";
+      _recipient: recipient;
+      _amount: amount
+    };
+    msgs = one_msg msg;
+    send msgs
+  | True =>
+  end
 end
 
 procedure Minting(to: ByStr20)
@@ -210,12 +210,11 @@ end
 transition Buy()
   total_supply <- total;
   total_reserve <- reserve;
-  amount_rewards <- rewards;
 
   b = get_pool_balance total_supply;
   price = get_price total_supply b;
   count = get_count _amount price;
-  is_zero = builtin eq count zero32;
+  is_zero = builtin eq count zero128;
 
   match is_zero with
   | True =>
@@ -224,7 +223,10 @@ transition Buy()
   | False =>
     accept;
 
-    CallTransfer _sender amount_rewards;
+    change = change_of_coins count price _amount;
+
+    AddFunds _sender change;
+
     Minting _sender
   end
 end
