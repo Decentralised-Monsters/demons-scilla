@@ -3,24 +3,22 @@ from random import *
 
 DECIMAL = 10**18
 
-current_lvl = 5000
-max_lvl = 5999
-emissionPerDay = 1000000000000000000
+blocks_for_rewards = 5000
+rewards = 20 * DECIMAL // blocks_for_rewards
+BLOCK_NUMBER = 2870309
 
-
-
-
-def claim():
-  return current_lvl // 5000 * emissionPerDay
+def claim(current_block, acumulated_block):
+  blocks = current_block - acumulated_block
+  return blocks * rewards
 
 valeus = []
 
-for i in range(100):
-    current_lvl += i * 10
+acumulated_block = 2870309
 
-    v = claim()
+for i in range(1000):
+    BLOCK_NUMBER += 1
 
-    print(v // DECIMAL)
+    v = claim(BLOCK_NUMBER, acumulated_block)
 
     valeus.append(v // DECIMAL)
 

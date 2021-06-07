@@ -193,6 +193,17 @@ procedure Minting(to: ByStr20)
   end
 end
 
+procedure CallBought(token_id: Uint256)
+  msg_to_distributor = {
+    _tag: "OnBoughtMask";
+    _recipient: distributor;
+    _amount: Uint128 0;
+    token_id: token_id
+  };
+  msgs = one_msg msg_to_distributor;
+  send msgs
+end
+
 procedure AddReserve(uri: String)
   count_reserve <- reserve;
 
@@ -239,14 +250,11 @@ end
 
 (* callbacks *)
 transition MintCallBack(recipient: ByStr20, token_id: Uint256, token_uri: String)
+  IsMain;  
+
   new_count <-& main.token_id_count;
 
+  CallBought token_id;
   total := new_count
-end
-
-transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
-end
-
-transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
 (* callbacks *)
