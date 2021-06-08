@@ -16,7 +16,7 @@ valeus = []
 acumulated_block = 2870309
 
 for i in range(1000):
-    BLOCK_NUMBER += 1
+    BLOCK_NUMBER += 3
 
     v = claim(BLOCK_NUMBER, acumulated_block)
 

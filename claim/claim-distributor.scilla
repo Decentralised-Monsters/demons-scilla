@@ -5,7 +5,7 @@ scilla_version 0
 (***************************************************)
 import ListUtils
 
-library DMZDistributorLib
+library DMZClaimLib
 
 (* Error events *)
 type Error =
@@ -63,7 +63,7 @@ let get_claim_value =
 (*             The contract definition             *)
 (***************************************************)
 
-contract DMZDistributor
+contract DMZClaimContract
 (
   contract_owner: ByStr20,
   dmz: ByStr20,
