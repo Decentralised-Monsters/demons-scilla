@@ -9,7 +9,6 @@ library BondingCurvedDistributor
 
 (* Error events *)
 type Error =
-  | CodeNotAuthorised
   | CodeNotMain
   | CodeInsufficientFunds
   | CodeNotContractOwner
@@ -32,10 +31,9 @@ let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotAuthorised     => Int32 -1
-      | CodeNotMain           => Int32 -2
-      | CodeInsufficientFunds => Int32 -3
-      | CodeNotContractOwner  => Int32 -4
+      | CodeNotMain           => Int32 -1
+      | CodeInsufficientFunds => Int32 -2
+      | CodeNotContractOwner  => Int32 -3
       end
     in
     { _exception : "Error"; code : result_code }
@@ -70,7 +68,7 @@ let get_pool_balance =
     let s_pow = builtin pow ts n in
       builtin mul mn s_pow
 
-(* p = (customization / exponent + 1 (s + k) ** exponent + 1) - b *)
+(* p = (customization / exponent + 1 * (s + k) ** exponent + 1) - b *)
 (* s - total_supply *)
 (* b - poolBalance *)
 let get_price =
