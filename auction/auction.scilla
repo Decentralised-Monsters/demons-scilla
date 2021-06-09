@@ -89,6 +89,7 @@ let option_address = @option_value ByStr20
 let auction_build =
   fun (owner: ByStr20) =>
   fun (increment: Uint128) =>
+  fun (min_price: Uint128) =>
   fun (start_block: BNum) =>
   fun (end_block: BNum) =>
   fun (token_id: Uint256) =>
@@ -99,7 +100,7 @@ let auction_build =
       end_block
       token_id
     in
-      Auction ff zero128 zero_address ff s
+      Auction ff min_price zero_address ff s
 
 let min = 
   fun (a: Uint128) =>
@@ -334,7 +335,7 @@ procedure TransferNFT(to: ByStr20, token_id: Uint256)
 end
 
 
-transition CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
+transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
   current_block <-& BLOCKNUMBER;
   total_ids <- total;
 
@@ -344,6 +345,7 @@ transition CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: B
   new_auction = auction_build
     _sender
     bid_increment
+    min_price
     start_block
     end_block
     token_id;
