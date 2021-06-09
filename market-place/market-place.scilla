@@ -1,0 +1,347 @@
+scilla_version 0
+
+(***************************************************)
+(*               Associated library                *)
+(***************************************************)
+import IntUtils
+
+library MarketPlace
+
+let not_pause = Uint32 0
+let on_pause = Uint32 1
+let zero_address = 0x0000000000000000000000000000000000000000
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+    Cons {Message} msg nil_msg
+
+let two_msgs =
+  fun (msg1 : Message) =>
+  fun (msg2 : Message) =>
+    let msgs_tmp = one_msg msg2 in
+      Cons {Message} msg1 msgs_tmp
+
+let one = Uint256 1
+
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_address = @option_value ByStr20
+
+(*ByStr20 - Address of owner*)
+(*Uint128 - Price*)
+(*Uint256 - tokenID*)
+(*Uint256 - orderID*)
+type Order =
+| Order of ByStr20 Uint128 Uint256 Uint256
+
+(* Error exceptions *)
+type Error =
+  | CodeMPnotApprovedToTransfer
+  | CodeOrderWrongState
+  | CodeOrderNotFound
+  | CodePaymentAmountError
+  | CodeNotAuthorized
+  | CodeNotTokenOwner
+  | CodePauseNotPause
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeMPnotApprovedToTransfer  => Int32 -1
+      | CodeOrderWrongState          => Int32 -2
+      | CodeOrderNotFound            => Int32 -3
+      | CodePaymentAmountError       => Int32 -4
+      | CodeNotAuthorized            => Int32 -5
+      | CodeNotTokenOwner            => Int32 -6
+      | CodePauseNotPause            => Int32 -7
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+
+contract MarketPlace
+(
+  contract_owner: ByStr20,
+  wallet: ByStr20,
+  main: ByStr20 with contract
+    field token_owners: Map Uint256 ByStr20,
+    field token_approvals: Map Uint256 ByStr20
+  end
+)
+
+field pause: Uint32 = not_pause
+(*Order IDs - use global variable to track order numbers *)
+field order_id : Uint256 = Uint256 0
+(* Orderbook: mapping (order_id => ( Order struct )) *)
+field orderbook : Map Uint256 Order
+                  = Emp Uint256 Order
+(* Fee taken from each purchase, 1/20 or 5% of price *)
+field marketplace_fee: Uint128 = Uint128 20
+
+(* Procedures *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure AddFunds(recipient: ByStr20, amount: Uint128)
+  msg = {
+    _tag: "AddFunds";
+    _recipient: recipient;
+    _amount: amount
+  };
+  msgs = one_msg msg;
+  send msgs
+end
+
+procedure CheckApproved(token_id: Uint256)
+  some_address <-& main.token_approvals[token_id];
+  address = option_address zero_address some_address;
+  is_self = builtin eq _this_address address;
+
+  match is_self with
+  | True =>
+  | False =>
+    err = CodeMPnotApprovedToTransfer;
+    ThrowError err
+  end
+end
+
+procedure TransferToOwner(token_id: Uint256, owner: ByStr20)
+  transfered = {
+    _tag: "Transfer";
+    _recipient: main;
+    _amount: Uint128 0;
+    to: owner;
+    token_id: token_id
+  };
+  msgs = one_msg transfered;
+  send msgs
+end
+
+procedure TransferToMarketPlace(token_id: Uint256)
+  transfered = {
+    _tag: "TransferFrom";
+    _recipient: main;
+    _amount: Uint128 0;
+    to: _this_address;
+    token_id: token_id
+  };
+  msgs = one_msg transfered;
+  send msgs
+end
+
+procedure IsContractOwner()
+  is_contract_owner = builtin eq _sender contract_owner;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotAuthorized;
+    ThrowError err 
+  end
+end
+
+procedure CheckPause(expected: Uint32)
+  curent_pause <- pause;
+  is_eq = builtin eq expected curent_pause;
+  match is_eq with
+  | True =>
+  | False =>
+    err = CodePauseNotPause;
+    ThrowError err
+  end
+end
+
+procedure CancelOrder(cancel_order_id: Uint256)
+  listing <- orderbook[cancel_order_id];
+  match listing with
+  | Some (Order owner price token_id item_order_id) =>
+    delete orderbook[item_order_id];
+    e = {
+      _eventname: "OrderCancelled";
+      item_order_id: item_order_id
+    };
+    event e;
+    TransferToOwner token_id owner
+  | None =>
+    err = CodeOrderNotFound;
+    ThrowError err
+  end
+end
+
+procedure CheckTokenOwner(token_id: Uint256)
+  some_token_owner <-& main.token_owners[token_id];
+  dragon_owner = option_address zero_address some_token_owner;
+  is_address_call = builtin eq _sender dragon_owner;
+  match is_address_call with
+  | False =>
+    err = CodeNotTokenOwner;
+    ThrowError err
+  | True =>
+  end
+end
+
+(* Create a listing and sell a Dragon*) 
+(* First call from frontend. User wants to post an item for sale. They call this function *)
+(* then it will check if approval is okay, if so, then it will transfer Dragon to itself, *)
+(* and create the listing information and publish it as an item for sale *)
+transition Sell(token_id: Uint256, price: Uint128)
+  CheckPause not_pause;
+  CheckApproved token_id;
+  CheckTokenOwner token_id;
+  TransferToMarketPlace token_id;
+
+  current_order_id <- order_id;
+  new_order = Order _sender price token_id current_order_id;
+  orderbook[current_order_id] := new_order;
+
+  new_order_id = builtin add current_order_id one;
+  order_id := new_order_id
+end
+
+(* Purchase an order/NFT that is for sale*)     
+transition Purchase(purchase_order_id: Uint256)
+  CheckPause not_pause;
+  listing <- orderbook[purchase_order_id];
+  current_marketplace_fee <- marketplace_fee;
+  match listing with
+  | Some (Order owner price token_id item_order_id) =>  
+
+      (* Check amount is right*)
+      is_amount_correct =  uint128_ge _amount price;
+      match is_amount_correct with
+      | True => 
+        accept;
+        (* amount is correct go ahead and remove order and transfer Dragon plus funds*)
+        (* remove fee from the purchase amount*)
+        fees = builtin div price current_marketplace_fee;
+        sellers_amount = builtin sub price fees;
+        (* Delete the order from the orderbook*)
+        delete orderbook[item_order_id];
+        (* transfer Dragon to new owner*)
+        nft_transfered = {
+          _tag: "Transfer";
+          _recipient: main;
+          _amount: Uint128 0;
+          to: _sender;
+          token_id: token_id
+        };
+        send_payment = {
+          _tag : ""; 
+          _recipient : owner; 
+          _amount : sellers_amount
+        };
+        e = {
+          _eventname : "PurchaseSuccess";
+          item_order_id: item_order_id;
+          token_id: token_id;
+          buyer_address: _sender;
+          seller_address: owner;
+          price_sold: sellers_amount
+        };
+        event e;
+        msgs = two_msgs nft_transfered send_payment;
+        send msgs
+      | False =>
+        err = CodePaymentAmountError;
+        ThrowError err
+      end
+  | None => 
+    err = CodeOrderNotFound;
+    ThrowError err
+  end
+end
+
+
+
+
+(* Cancel listing, remove it, and transfer Dragon back to owner*) 
+(* Only performed by owner of listing*)
+transition CancelListing(cancel_order_id : Uint256)
+  listing <- orderbook[cancel_order_id];
+  match listing with
+  | Some (Order owner price token_id item_order_id) =>  
+    (*check if owner of order*)
+    is_owner = builtin eq _sender owner;
+    match is_owner with
+    | True => 
+      (*Go ahead delete the order and return Dragon*)
+      delete orderbook[item_order_id];
+      e = {
+        _eventname: "OrderCanceled";
+        extracted_order: item_order_id
+      };
+      event e;
+      (*transfer Dragon to owner*)
+      TransferToOwner token_id owner
+    | False =>
+      err = CodeNotAuthorized;
+      ThrowError err
+    end
+  | None => 
+    err = CodeOrderNotFound;
+    ThrowError err
+  end
+end
+
+(* Cancel an order and refund the NFT when the contract is on pause *)
+transition CancelOrders(orders_list: List Uint256)
+  CheckPause on_pause;
+  forall orders_list CancelOrder
+end
+
+transition ReturnFunds()
+  bal <- _balance;
+  AddFunds wallet bal
+end
+
+(* Admin only transitions *)
+transition ChangeMarketPlaceFee(new_fee: Uint128)
+  IsContractOwner;
+  old_fee <- marketplace_fee;
+  marketplace_fee := new_fee;
+  e = {
+    _eventname: "FeeChanged";
+    previous_fee: old_fee;
+    new_fee: new_fee
+  };
+  event e
+end
+
+transition ChangePause()
+  IsContractOwner;
+  status <- pause;
+  is_pause = builtin eq status on_pause;
+  match is_pause with
+  | True =>
+    pause := not_pause;
+    e = {_eventname : "Working"};
+    event e
+  | False =>
+    pause := on_pause;
+    e = {_eventname : "Paused"};
+    event e
+  end
+end
+
+(*Empty callbacks*)
+transition RecipientAcceptTransferFrom(from: ByStr20, recipient: ByStr20, token_id: Uint256)
+end
+
+transition TransferSuccessCallBack(from: ByStr20, recipient: ByStr20, token_id: Uint256)
+end
+
+transition TransferFromSuccessCallBack(from: ByStr20, recipient: ByStr20, token_id: Uint256)
+end
