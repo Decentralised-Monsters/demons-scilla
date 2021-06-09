@@ -60,7 +60,7 @@ procedure ThrowError(err : Error)
   throw e
 end
 
-procedure IsOwner()
+procedure OnlyAdmin()
   is_owner = builtin eq contract_owner _sender;
   match is_owner with
   | True =>
@@ -129,6 +129,30 @@ transition SetName(token_id: Uint256, new_name: String)
     err = CodeMinLVL;
     ThrowError err
   end
+end
+
+transition ChangeMinLevel(value: Uint32)
+  OnlyAdmin;
+
+  min_lvl_for_change := value;
+
+  e = {
+    _eventname: "MinLevelChanged";
+    min_lvl_for_change: value
+  };
+  event e
+end
+
+transition ChangePrice(value: Uint128)
+  OnlyAdmin;
+
+  price_for_change := value;
+
+  e = {
+    _eventname: "PriceChanged";
+    price_for_change: value
+  };
+  event e
 end
 
 (* callbacks *)
