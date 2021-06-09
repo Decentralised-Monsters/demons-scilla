@@ -54,7 +54,7 @@ let blk_gte =
   fun (blk1 : BNum) =>
   fun (blk2 : BNum) =>
     let lt = builtin blt blk1 blk2 in
-    negb lt
+      negb lt
 
 let make_error =
   fun (result : Error) =>
