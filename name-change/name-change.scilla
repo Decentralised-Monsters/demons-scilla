@@ -52,7 +52,7 @@ contract NameContract
 )
 
 (* Mutable fields *)
-field min_lvl_for_change: Uint32 = Uint32 5999
+field min_lvl_for_change: Uint32 = Uint32 5000
 field price_for_change: Uint128 = Uint128 150000000000000000000
 
 procedure ThrowError(err : Error)
