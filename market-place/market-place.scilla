@@ -230,19 +230,9 @@ transition Purchase(purchase_order_id: Uint256)
         sellers_amount = builtin sub price fees;
         (* Delete the order from the orderbook*)
         delete orderbook[item_order_id];
-        (* transfer Dragon to new owner*)
-        nft_transfered = {
-          _tag: "Transfer";
-          _recipient: main;
-          _amount: Uint128 0;
-          to: _sender;
-          token_id: token_id
-        };
-        send_payment = {
-          _tag : ""; 
-          _recipient : owner; 
-          _amount : sellers_amount
-        };
+        (* transfer to new owner*)
+        TransferToOwner token_id _sender;
+        AddFunds owner sellers_amount;
         e = {
           _eventname : "PurchaseSuccess";
           item_order_id: item_order_id;
@@ -263,8 +253,6 @@ transition Purchase(purchase_order_id: Uint256)
     ThrowError err
   end
 end
-
-
 
 
 (* Cancel listing, remove it, and transfer Dragon back to owner*) 

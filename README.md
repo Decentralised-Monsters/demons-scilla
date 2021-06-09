@@ -8,6 +8,7 @@ Contracts:
   * [crowd-sale](https://github.com/hicaru/demons-scilla/tree/master/crowd-sale)
   * [lvl-up](https://github.com/hicaru/demons-scilla/tree/master/lvl)
   * [name-change](https://github.com/hicaru/demons-scilla/tree/master/name-change)
+  * [market-place](https://github.com/hicaru/demons-scilla/tree/master/market-place)
 
 # Deploy
 
@@ -219,3 +220,27 @@ Init:
 ]
 ```
 => "0x8550c1f62f4a40081600a6986c6e420a75ebdece"
+
+### 7: [Deploy MarketPlace contract:](https://github.com/hicaru/demons-scilla/tree/master/market-place)
+
+Init:
+```json
+[
+    {
+        "type": "ByStr20",
+        "value": "0x119929d8c388DE3650Ea1B3DC7b9Fe0ceEFE862F",
+        "vname": "contract_owner"
+    },
+    {
+        "type": "ByStr20",
+        "value": "0x4ef291cEbD95ab4231eB52b02Cdf0E231Eab565a",
+        "vname": "wallet"
+    },
+    {
+        "type": "ByStr20",
+        "value": "0xeb9b2acf86d52c900fc01852bb351ebc91c96f38",
+        "vname": "main"
+    }
+]
+```
+=> "0x728f6affcdcf5fb8d9b13879c90ce9a4491a7e81"
