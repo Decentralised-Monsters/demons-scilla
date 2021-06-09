@@ -40,6 +40,7 @@ let one_msg =
   let nil_msg = Nil {Message} in
   Cons {Message} msg nil_msg
 
+(* COMMENT: This function isn't appropriately named. *)
 let get_highest_bidder =
   fun (sender: ByStr20) =>
   fun (bidder: ByStr20) =>
@@ -52,9 +53,8 @@ let get_highest_bidder =
 let blk_gte =
   fun (blk1 : BNum) =>
   fun (blk2 : BNum) =>
-    let bc1 = builtin blt blk2 blk1 in
-    let bc2 = builtin eq blk1 blk2 in
-      orb bc1 bc2
+    let lt = builtin blt blk1 blk2 in
+    negb lt
 
 let make_error =
   fun (result : Error) =>
@@ -200,15 +200,16 @@ procedure OnlyBeforeEnd(end_block: BNum, current: BNum)
 end
 
 procedure OnlyEndedOrCanceled(canceled: Bool, end_block: BNum, current: BNum)
-  is_less = builtin blt current end_block;
-  neg_canceled = negb canceled;
-  is_reject = andb is_less neg_canceled;
+  not_ended = builtin blt current end_block;
+  not_canceled = negb canceled;
+  active = andb not_ended not_canceled;
 
-  match is_reject with
+  match active with
   | True =>
     err = CodeNotEndedOrCanceled;
     ThrowError err
   | False =>
+    (* active = not ended and not canceled *)
   end
 end
 
@@ -233,17 +234,15 @@ procedure OnlyNotOwner(owner: ByStr20)
 end
 
 procedure CheckBipAmount(bid: Uint128, highest_binding_bid: Uint128)
-  (* if the user isn't even willing to overbid the highest binding bid, there's nothing for us *)
-  (* to do except revert the transaction. *)
-  is_less = builtin lt bid highest_binding_bid;
-  is_equal = builtin eq bid highest_binding_bid;
-  is_revert = orb is_less is_equal;
+  is_gt_current_highest = builtin lt highest_binding_bid bid;
 
-  match is_revert with
+  match is_gt_current_highest with
   | True =>
+  | False =>
+    (* if the user isn't even willing to overbid the highest binding bid, there's nothing for us *)
+    (* to do except revert the transaction. *)
     err = CodeBipLessThanCurrent;
     ThrowError err
-  | False =>
   end
 end
 
@@ -303,11 +302,13 @@ end
 
 procedure ReturnFunds(id: Uint256, to: ByStr20)
   some_amount <- funds_by_bidder[to][id];
-  amount = option_uint128 zero128 some_amount;
 
-  delete funds_by_bidder[to][id];
-
-  AddFunds to amount
+  match some_amount with
+  | Some amount =>
+    delete funds_by_bidder[to][id];
+    AddFunds to amount
+  | None =>
+  end
 end
 
 procedure TransferFromNFT(to: ByStr20, token_id: Uint256)
