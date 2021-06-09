@@ -5,7 +5,7 @@ Our auction contract will have a simple interface that allows users to place bid
 I’ve settled on the following interface, which should provide just enough expressiveness to handle this functionality. Notice that this is also a good time to think about the events that we might want these functions to emit.
 
  * CreateAuction - A transition for create an auction.
-  - bid_increment (Uint128) - The min price for bid.
+  - bid_increment (Uint128) - The incrementer price for bid.
   - start_block (BNum) - the block number which auction shell start. (cannot be less or equal current_block)
   - end_block (BNum) - The block number which auction shell end. (cannot be less or equal start_block)
   - token_id (Uint256) - The approved `token_id` for place on auction.
