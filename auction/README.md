@@ -87,6 +87,12 @@ contract AuctionFactoryLib
     | Auction of Bool Uint128 ByStr20 Bool StaticAuction
 ```
 
+Some of these are self-explanatory, like canceled and fundsByBidder. We’ll see how these are used when we start writing our contract’s functions. What about the rest?
+Every auction needs an owner — the person to whom the winning bid will go if the auction completes successfully. If you were so inclined, you might want to separate out the “controller” (say, the person or contract that has permission to cancel the auction) from the “beneficiary” (the person or contract to whom the funds will go after the auction is over), but I’ll leave that as an exercise to the reader. For now, they’re one and the same.
+Auctions also require a start and end time. Time in Scilla is a bit tricky — block timestamps are set by miners, and are not necessarily safe from spoofing. An emerging best practice is to demarcate time based on block number. We know with a fair amount of certainty that ZIlliqa blocks are generated roughly every 39 seconds; consequently we can infer timestamps from these numbers rather than the spoofable timestamp fields. Hence, startBlock and endBlock. If we build our UI correctly, this abstraction should be invisible to the user.
+
+What about bidIncrement and highestBindingBid? It’s worth taking a moment to explain these. On many popular auction platforms, users are incentivized to bid the maximum they’re willing to pay by not binding them to that full amount, but rather to the previous highest bid plus the increment. That’s a mouthful, so let me give an example. Let’s say the current highest bid is $430, and the bidIncrement is $10. You decide to bid $500. However, you are only obligated to pay $440 (the current highest bid + bidIncrement) if you win the auction. In this case, $440 is the highestBindingBid. If someone comes along and bids $450, you will still be the highestBidder, but the highestBindingBid will be raised to $460. It’s sort of like asking the platform to automatically bid for you up to a given amount, after which point you’ll need to make a decision to raise your maximum bid or bow out. Just to be clear, anything you send in excess of highestBindingBid will be refunded to you when you win the auction.
+
 
 ## Errors
 
