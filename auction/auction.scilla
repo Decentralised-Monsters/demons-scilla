@@ -291,13 +291,19 @@ procedure DeleteAuction(id: Uint256)
 end
 
 procedure AddFunds(recipient: ByStr20, amount: Uint128)
-  msg = {
-    _tag: "AddFunds";
-    _recipient: recipient;
-    _amount: amount
-  };
-  msgs = one_msg msg;
-  send msgs
+  is_zero = builtin eq amount zero128;
+
+  match is_zero with
+  | True =>
+  | False =>
+    msg = {
+      _tag: "AddFunds";
+      _recipient: recipient;
+      _amount: amount
+    };
+    msgs = one_msg msg;
+    send msgs
+  end
 end
 
 procedure ReturnFunds(id: Uint256, to: ByStr20)
@@ -471,6 +477,9 @@ transition Withdraw(id: Uint256)
       match static with
       | StaticAuction owner bid_increment start_block end_block token_id =>
         OnlyEndedOrCanceled canceled end_block current_block;
+
+        is_highest_bidder = builtin eq highest_bidder _sender;
+
         match canceled with
         | True =>
           (* if the auction was canceled, everyone should simply be allowed to withdraw their funds *)
@@ -494,10 +503,15 @@ transition Withdraw(id: Uint256)
             delete funds_by_bidder[highest_bidder][id];
 
             AddFunds owner value;
-            AddFunds wallet com
-          | False =>
-            is_highest_bidder = builtin eq highest_bidder _sender;
+            AddFunds wallet com;
 
+            match is_highest_bidder with
+            | True =>
+              (* Returns the NFT token again owner. *)
+              TransferNFT _sender token_id
+            | False =>
+            end
+          | False =>
             match is_highest_bidder with
             | True =>
               (* the highest bidder should only be allowed to withdraw the difference between their *)
