@@ -100,7 +100,7 @@ let auction_build =
       end_block
       token_id
     in
-      Auction ff min_price zero_address ff s
+      Auction ff min_price owner ff s
 
 let min = 
   fun (a: Uint128) =>
