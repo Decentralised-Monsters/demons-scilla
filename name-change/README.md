@@ -1,8 +1,8 @@
 # Start with the interface
 
  * SetName - Change name for dmz before call need aprove (`IncreaseAllowance`).
-  - token_id (Uint256) - The id of token whitch name will be changed.
-  - new_name (String) - new name for token.
+ * - token_id (Uint256) - The id of token whitch name will be changed.
+ * - new_name (String) - new name for token.
  * ChangeMinLevel - Admin method for change min level for change name.
  * ChangePrice - Admin method for change price for change name.
 

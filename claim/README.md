@@ -1,12 +1,12 @@
 # Start with the interface
 
  * Claim - transitions for getting rewards with dmz token.
-  - token_id (Uint256) - the `_sender` token id.
+ * - token_id (Uint256) - the `_sender` token id.
  * SetRewards - Settings for rewards `current_block - accumulated_block * rewards`
-  - blocks (BNum) - Amount of block for get minimum rewards.
-  - rewards_amount (Uint128) - Amount of rewards per `blocks`
+ * - blocks (BNum) - Amount of block for get minimum rewards.
+ * - rewards_amount (Uint128) - Amount of rewards per `blocks`
  * SetCrowdSale - Setup the Crowdsale contract.
-  - address (ByStr20) - CrowdSale contract address.
+ * - address (ByStr20) - CrowdSale contract address.
  * RecipientAcceptTransfer - Contract can receive ZRC2 tokens.
  * TransferSuccessCallBack - Contract can make Tranfer ZRC2 tokens.
 

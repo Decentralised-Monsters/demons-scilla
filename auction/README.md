@@ -5,19 +5,19 @@ Our auction contract will have a simple interface that allows users to place bid
 I’ve settled on the following interface, which should provide just enough expressiveness to handle this functionality. Notice that this is also a good time to think about the events that we might want these functions to emit.
 
  * CreateAuction - A transition for create an auction.
-  - bid_increment (Uint128) - The incrementer price for bid.
-  - start_block (BNum) - the block number which auction shell start. (cannot be less or equal current_block)
-  - end_block (BNum) - The block number which auction shell end. (cannot be less or equal start_block)
-  - token_id (Uint256) - The approved `token_id` for place on auction.
+ * - bid_increment (Uint128) - The incrementer price for bid.
+ * - start_block (BNum) - the block number which auction shell start. (cannot be less or equal current_block)
+ * - end_block (BNum) - The block number which auction shell end. (cannot be less or equal start_block)
+ * - token_id (Uint256) - The approved `token_id` for place on auction.
  * PlaceBid - A transition for create a bid.
-  - id (Uint256) - The id of auction.
-  - _amount (Uint128) - value of ZILs.
+ * - id (Uint256) - The id of auction.
+ * - _amount (Uint128) - value of ZILs.
  * CancelAuction - A transition for cancel auction (auction creater only.)
-  - id (Uint256) - The id of auction.
+ * - id (Uint256) - The id of auction.
  * Withdraw - A transition for withdraw funds or token if sender is leader of auction.
-  - id (Uint256) - The id of auction.
+ * - id (Uint256) - The id of auction.
  * RemoveAuctionList - An admin transition for remove old auctions.
-  - id_list (List Uint256) - A list of id auctions.
+ * - id_list (List Uint256) - A list of id auctions.
  * SetCommission - An admin transition for change dev commission.
 
 transitions user only:
@@ -64,17 +64,17 @@ contract AuctionFactory
 ## Custom types
 
  * StaticAuction - Data which doesn’t change over the life of the contract
-  - owner (ByStr20) - A creater of auction.
-  - bid_increment (Uint128) - Minimum price for bid.
-  - start_block (BNum) - block number which start auction.
-  - end_block (BNum) - block number wich end of auction.
-  - token_id (Uint256) - a NFT token placed on auction.
+ * - owner (ByStr20) - A creater of auction.
+ * - bid_increment (Uint128) - Minimum price for bid.
+ * - start_block (BNum) - block number which start auction.
+ * - end_block (BNum) - block number wich end of auction.
+ * - token_id (Uint256) - a NFT token placed on auction.
  * Auction - Data which can change until doesn't canceled or ended of time
-  - canceled (Bool) - Auction stage, user can cancel the auction.
-  - highest_binding_bid (Uint128) - the highest binding bid.
-  - highest bidder (ByStr20) - The leader of auction.
-  - owner_has_withdrawn (Bool) - If owner already withdrawn the ZILs.
-  - static - A static information.
+ * - canceled (Bool) - Auction stage, user can cancel the auction.
+ * - highest_binding_bid (Uint128) - the highest binding bid.
+ * - highest bidder (ByStr20) - The leader of auction.
+ * - owner_has_withdrawn (Bool) - If owner already withdrawn the ZILs.
+ * - static - A static information.
 
 ```Ocaml
 contract AuctionFactoryLib

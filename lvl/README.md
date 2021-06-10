@@ -1,10 +1,10 @@
 # Start with the interface
 
  * Upgrade - For upgrade to next level. (Before use should be aproved on ZRC2 contract. via `IncreaseAllowance`)
-  - amount (Uint128) - Amount of DMZ tokens.
-  - token_id (Uint256) - token id which going to upgrade.
+ * - amount (Uint128) - Amount of DMZ tokens.
+ * - token_id (Uint256) - token id which going to upgrade.
  * SetMaxLVL - Admin only method for change limit for lvl.
-  - value (Uint32) - the new value for `max_lvl`.
+ * - value (Uint32) - the new value for `max_lvl`.
 
 transitions user only:
 ```Ocaml

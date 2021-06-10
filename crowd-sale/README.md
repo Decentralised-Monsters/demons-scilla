@@ -1,10 +1,10 @@
 # Start with the interface
 
 * Buy - Method for buy mask
- - `_amount` - the Amount of ZILs.
+* - `_amount` - the Amount of ZILs.
 * ReturnFunds - Just send the stored ZILs to `wallet`
 * AddReserveList - Admin can add to list new masks.
- - token_uris_list (List String) - URLs to IPFS.
+* - token_uris_list (List String) - URLs to IPFS.
 * MintCallBack - Contract able to mint new tokens.
 
 transitions user only:
