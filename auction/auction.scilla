@@ -503,8 +503,7 @@ transition Withdraw(id: Uint256)
           | False =>
             match is_highest_bidder with
             | True =>
-              (* the highest bidder should only be allowed to withdraw the difference between their *)
-              (* highest bid and the highestBindingBid *)
+              (* the highest bidder should only be allowed to withdraw the NFT token. *)
               TransferNFT _sender token_id
             | False =>
               (* anyone who participated but did not win the auction should be allowed to withdraw *)
