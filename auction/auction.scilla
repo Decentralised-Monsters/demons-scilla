@@ -40,16 +40,6 @@ let one_msg =
   let nil_msg = Nil {Message} in
   Cons {Message} msg nil_msg
 
-(* COMMENT: This function isn't appropriately named. *)
-let get_highest_bidder =
-  fun (sender: ByStr20) =>
-  fun (bidder: ByStr20) =>
-   let is_same = builtin eq bidder sender in
-    match is_same with
-    | False => sender
-    | True => bidder
-    end
-
 let blk_gte =
   fun (blk1 : BNum) =>
   fun (blk2 : BNum) =>
@@ -420,12 +410,11 @@ transition PlaceBid(id: Uint256)
           (* their maximum bid, in which case we shouldn't increase the highestBindingBid. *)
           (* if the user is NOT highestBidder, and has overbid highestBid completely, we set them *)
           (* as the new highestBidder and recalculate highestBindingBid. *)
-          new_highest_bidder = get_highest_bidder _sender highest_bidder;
           new_highest_binding_bid = builtin add highest_bid bid_increment;
           new_highest_binding_bid = min new_bid new_highest_binding_bid;
-          new_auction = Auction canceled new_highest_binding_bid new_highest_bidder owner_has_withdrawn static;
+          new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
           auctions[id] := new_auction;
-          EmitBidEvent new_highest_binding_bid new_highest_bidder
+          EmitBidEvent new_highest_binding_bid _sender
         end
       end
     end
