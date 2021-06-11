@@ -485,6 +485,7 @@ transition Withdraw(id: Uint256)
             auctions[id] := new_auction;
 
             amount = option_uint128 zero128 some_bid_amount;
+            amount = builtin sub amount highest_binding_bid;
             com = builtin mul dev_commission amount;
             com = builtin div com one_hundred128;
             value = builtin sub amount com;
@@ -504,7 +505,8 @@ transition Withdraw(id: Uint256)
             match is_highest_bidder with
             | True =>
               (* the highest bidder should only be allowed to withdraw the NFT token. *)
-              TransferNFT _sender token_id
+              TransferNFT _sender token_id;
+              AddFunds _sender highest_binding_bid
             | False =>
               (* anyone who participated but did not win the auction should be allowed to withdraw *)
               (* the full amount of their funds *)
