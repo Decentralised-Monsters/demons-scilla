@@ -221,7 +221,6 @@ end
 
 transition Buy()
   total_supply <- total;
-  total_reserve <- reserve;
 
   b = get_pool_balance total_supply;
   price = get_price total_supply b;
