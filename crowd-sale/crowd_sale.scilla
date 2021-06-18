@@ -171,8 +171,7 @@ end
 
 procedure Minting(to: ByStr20)
   total_reserve <- reserve;
-  next_id = builtin sub total_reserve one256;
-  some_uri <- tokens_reserve[next_id];
+  some_uri <- tokens_reserve[total_reserve];
 
   match some_uri with
   | Some uri =>
@@ -188,10 +187,10 @@ procedure Minting(to: ByStr20)
     new_total_reserve = builtin sub total_reserve one256;
 
     reserve := new_total_reserve;
-    delete tokens_reserve[next_id]
+    delete tokens_reserve[total_reserve]
   | None =>
-  err = CodeNotFound;
-  ThrowError err
+    err = CodeNotFound;
+    ThrowError err
   end
 end
 
