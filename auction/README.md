@@ -49,12 +49,14 @@ contract AuctionFactory
  * contract_owner - Admin of contract.
  * wallet - A wallet for store commission rewards.
  * main - The Main NFT token address.
+ * dmz - The Main of ZRC2 contract.
 
 ```Ocaml
 contract AuctionFactory
 (
   contract_owner: ByStr20,
   wallet: ByStr20,
+  dmz: ByStr20,
   main: ByStr20 with contract
     field token_owners: Map Uint256 ByStr20
   end
