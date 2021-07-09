@@ -505,7 +505,6 @@ transition Withdraw(id: Uint256)
             auctions[id] := new_auction;
 
             amount = option_uint128 zero128 some_bid_amount;
-            amount = builtin sub amount highest_binding_bid;
             com = builtin mul dev_commission amount;
             com = builtin div com one_hundred128;
             value = builtin sub amount com;
