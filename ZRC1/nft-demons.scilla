@@ -457,9 +457,7 @@ transition Transfer(to: ByStr20, token_id: Uint256)
   event e;
   msg_to_recipient = { _tag : "RecipientAcceptTransfer"; _recipient : to; _amount : Uint128 0; 
                       from : _sender; recipient : to; token_id : token_id };
-  msg_to_sender = { _tag : "TransferSuccessCallBack"; _recipient : _sender; _amount : Uint128 0; 
-                    from : _sender; recipient : to; token_id : token_id };
-  msgs = two_msgs msg_to_recipient msg_to_sender;
+  msgs = one_msg msg_to_recipient;
   send msgs
 end
 
@@ -507,12 +505,6 @@ transition TransferFrom(to: ByStr20, token_id: Uint256)
     (* Add one to the new token owner count *)
     UpdateTokenCount add_operation to;
     e = {_eventname: "TransferFromSuccess"; from: token_owner; recipient: to; token_id: token_id};
-    event e;
-    msg_to_recipient = { _tag : "RecipientAcceptTransferFrom"; _recipient : to; _amount : Uint128 0; 
-                        from : token_owner; recipient : to; token_id : token_id };
-    msg_to_sender = { _tag : "TransferFromSuccessCallBack"; _recipient : _sender; _amount : Uint128 0; 
-                      from : token_owner; recipient : to; token_id : token_id };
-    msgs = two_msgs msg_to_recipient msg_to_sender;
-    send msgs
+    event e
   end
 end
