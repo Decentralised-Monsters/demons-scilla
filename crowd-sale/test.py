@@ -4,7 +4,7 @@ from random import *
 MAX_BUY = 1
 EXPONENT = 2
 DECIMAL = 10 ** 18
-CUSTOMIZATION = 100000000000000
+CUSTOMIZATION = 3214500000000000000000
 
 reserve = 100
 total_supply = 0
@@ -34,6 +34,8 @@ def buy(amount):
   b = get_pool_balance(total_supply)
   price = get_price(total_supply, b)
   count = get_count(amount, price)
+
+  print(price // DECIMAL)
 
   return (price, count)
 
