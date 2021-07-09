@@ -109,6 +109,7 @@ contract AuctionFactory
 (
   contract_owner: ByStr20,
   wallet: ByStr20,
+  dmz: ByStr20,
   main: ByStr20 with contract
     field token_owners: Map Uint256 ByStr20
   end
@@ -280,18 +281,37 @@ procedure DeleteAuction(id: Uint256)
   end
 end
 
-procedure AddFunds(recipient: ByStr20, amount: Uint128)
+procedure CallTransferFromDMZ(amount: Uint128, from: ByStr20, to: ByStr20)
   is_zero = builtin eq amount zero128;
-
   match is_zero with
   | True =>
   | False =>
-    msg = {
-      _tag: "AddFunds";
-      _recipient: recipient;
-      _amount: amount
+    call_transfer_from = {
+      _tag: "TransferFrom";
+      _recipient: dmz;
+      _amount: Uint128 0;
+      from: from;
+      to: to;
+      amount: amount
     };
-    msgs = one_msg msg;
+    msgs = one_msg call_transfer_from;
+    send msgs
+  end
+end
+
+procedure CallTransferDMZ(to: ByStr20, amount: Uint128)
+  is_zero = builtin eq amount zero128;
+  match is_zero with
+  | True =>
+  | False =>
+    msg_transfer = {
+      _tag: "Transfer";
+      _recipient: dmz;
+      _amount: zero128;
+      to: to;
+      amount: amount
+    };
+    msgs = one_msg msg_transfer;
     send msgs
   end
 end
@@ -302,7 +322,7 @@ procedure ReturnFunds(id: Uint256, to: ByStr20)
   match some_amount with
   | Some amount =>
     delete funds_by_bidder[to][id];
-    AddFunds to amount
+    CallTransferDMZ to amount
   | None =>
   end
 end
@@ -360,14 +380,14 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
   event e
 end
 
-transition PlaceBid(id: Uint256)
+transition PlaceBid(id: Uint256, amount: Uint128)
   current_block <-& BLOCKNUMBER;
   some_current_bid <- funds_by_bidder[_sender][id];
   some_auction <- auctions[id];
   (* calculate the user's total bid based on the current amount they've sent to the contract *)
   (* plus whatever has been sent with this transaction *)
   current_bid = option_uint128 zero128 some_current_bid;
-  new_bid = builtin add current_bid _amount;
+  new_bid = builtin add current_bid amount;
 
   match some_auction with
   | Some auction =>
@@ -384,7 +404,7 @@ transition PlaceBid(id: Uint256)
         OnlyBeforeEnd end_block current_block;
         OnlyNotOwner owner;
         CheckBipAmount new_bid highest_binding_bid;
-        accept;
+        CallTransferFromDMZ amount _sender _this_address;
         (* if the user has overbid the highestBindingBid but not the highestBid, we simply *)
         (* increase the highestBindingBid and leave highestBidder alone. *)
         (* note that this case is impossible if _sender == highestBidder because you can never *)
@@ -492,8 +512,8 @@ transition Withdraw(id: Uint256)
 
             delete funds_by_bidder[highest_bidder][id];
 
-            AddFunds owner value;
-            AddFunds wallet com;
+            CallTransferDMZ owner value;
+            CallTransferDMZ wallet com;
 
             match is_highest_bidder with
             | True =>
@@ -505,8 +525,7 @@ transition Withdraw(id: Uint256)
             match is_highest_bidder with
             | True =>
               (* the highest bidder should only be allowed to withdraw the NFT token. *)
-              TransferNFT _sender token_id;
-              AddFunds _sender highest_binding_bid
+              TransferNFT _sender token_id
             | False =>
               (* anyone who participated but did not win the auction should be allowed to withdraw *)
               (* the full amount of their funds *)
@@ -541,11 +560,14 @@ end
 
 
 (*Empty callbacks*)
-transition RecipientAcceptTransferFrom(from: ByStr20, recipient: ByStr20, token_id: Uint256)
+transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
 
-transition TransferFromSuccessCallBack(from: ByStr20, recipient: ByStr20, token_id: Uint256)
+transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
 
-transition TransferSuccessCallBack(from: ByStr20, recipient: ByStr20, token_id: Uint256)
+transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+
+transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
