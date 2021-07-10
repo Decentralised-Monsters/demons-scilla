@@ -35,8 +35,6 @@ def buy(amount):
   price = get_price(total_supply, b)
   count = get_count(amount, price)
 
-  print(price // DECIMAL)
-
   return (price, count)
 
 
@@ -50,7 +48,7 @@ for i in range(100):
     reserve -= 1
     total_supply += 1
 
-    prices.append(price)
+    prices.append(price // DECIMAL)
     counter.append(count)
 
 # plt.plot(block_list)

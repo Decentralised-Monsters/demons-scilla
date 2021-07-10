@@ -25,15 +25,23 @@ type StaticAuction =
 type Auction =
   | Auction of Bool Uint128 ByStr20 Bool StaticAuction
 
+type Operation =
+  | Add
+  | Sub
 
 let zero_address = 0x0000000000000000000000000000000000000000
 
 let zero256 = Uint256 0
 let zero128 = Uint128 0
+let zero64 = Uint64 0
 
 let one_hundred128 = Uint128 100
 let one256 = Uint256 1
+let one64 = Uint64 1
 let ff = False
+
+let add_operation = Add
+let sub_operation = Sub
 
 let one_msg = 
   fun (msg : Message) => 
@@ -74,7 +82,16 @@ let option_value =
     end
 
 let option_uint128 = @option_value Uint128
+let option_uint64 = @option_value Uint64
 let option_address = @option_value ByStr20
+
+let new_counter =
+    fun (current: Uint64) =>
+    fun (op: Operation) =>
+      match op with
+      | Add => builtin add one64 current
+      | Sub => builtin sub current one64
+      end
 
 let auction_build =
   fun (owner: ByStr20) =>
@@ -120,6 +137,7 @@ field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128)
   = Emp ByStr20 (Map Uint256 Uint128)
 
 field auctions: Map Uint256 Auction = Emp Uint256 Auction
+field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
 field total: Uint256 = zero256
 field commission: Uint128 = Uint128 10
 
@@ -250,34 +268,19 @@ procedure CheckStartBlock(start_block: BNum, end_block: BNum, current_block: BNu
   end
 end
 
-procedure DeleteAuction(id: Uint256)
-  some_auction <- auctions[id];
-  current_block <-& BLOCKNUMBER;
+procedure UpdateCounter(id: Uint256, op: Operation)
+  some_bid_count <- bid_count[id];
 
-  match some_auction with
-  | Some auction =>
-    match auction with
-    | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
-      OnlyWithdrawn owner_has_withdrawn;
-      match static with
-      | StaticAuction owner bid_increment start_block end_block token_id =>
-        OnlyEndedOrCanceled canceled end_block current_block;
-        some_token_owner <-& main.token_owners[token_id];
-        token_owner = option_address zero_address some_token_owner;
-        is_self = builtin eq token_owner _this_address;
+  current_count_bid = option_uint64 zero64 some_bid_count;
+  new_counter = new_counter current_count_bid op;
+  is_zero = builtin eq new_counter zero64;
 
-        match is_self with
-        | True =>
-          err = CodeOnlyWithdrawn;
-          ThrowError err
-        | False =>
-          delete auctions[id]
-        end
-      end
-    end
-  | None =>
-    err = CodeNotFound;
-    ThrowError err
+  match is_zero with
+  | True =>
+    delete bid_count[id];
+    delete auctions[id]
+  | False =>
+    bid_count[id] := new_counter
   end
 end
 
@@ -369,6 +372,7 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
 
   auctions[next_id] := new_auction;
   total := next_id;
+  bid_count[next_id] := zero64;
 
   TransferFromNFT _this_address token_id;
 
@@ -388,6 +392,12 @@ transition PlaceBid(id: Uint256, amount: Uint128)
   (* plus whatever has been sent with this transaction *)
   current_bid = option_uint128 zero128 some_current_bid;
   new_bid = builtin add current_bid amount;
+
+  match some_current_bid with
+  | Some current_bid =>
+  | None =>
+    UpdateCounter id add_operation
+  end;
 
   match some_auction with
   | Some auction =>
@@ -521,6 +531,7 @@ transition Withdraw(id: Uint256)
             | False =>
             end
           | False =>
+            UpdateCounter id sub_operation;
             match is_highest_bidder with
             | True =>
               (* the highest bidder should only be allowed to withdraw the NFT token. *)
@@ -528,6 +539,7 @@ transition Withdraw(id: Uint256)
             | False =>
               (* anyone who participated but did not win the auction should be allowed to withdraw *)
               (* the full amount of their funds *)
+              delete funds_by_bidder[_sender][id];
               ReturnFunds id _sender
             end
           end
@@ -538,11 +550,6 @@ transition Withdraw(id: Uint256)
     err = CodeNotFound;
     ThrowError err
   end
-end
-
-transition RemoveAuctionList(id_list: List Uint256)
-  IsContractOwner;
-  forall id_list DeleteAuction
 end
 
 transition SetCommission(value: Uint128)
