@@ -372,7 +372,7 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
 
   auctions[next_id] := new_auction;
   total := next_id;
-  bid_count[next_id] := zero64;
+  bid_count[next_id] := one64;
 
   TransferFromNFT _this_address token_id;
 
@@ -471,7 +471,8 @@ transition CancelAuction(id: Uint256)
         new_canceled = True;
         new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
         auctions[id] := new_auction;
-        TransferNFT owner token_id
+        UpdateCounter id sub_operation;
+        TransferNFT _sender token_id;
         e = {
           _eventname: "CanceledEventSuccess";
           id: id
@@ -499,42 +500,38 @@ transition Withdraw(id: Uint256)
         OnlyEndedOrCanceled canceled end_block current_block;
 
         is_highest_bidder = builtin eq highest_bidder _sender;
+        is_owner = builtin eq owner _sender;
+        UpdateCounter id sub_operation;
 
-        match canceled with
+        match is_owner with
         | True =>
-          (* if the auction was canceled, everyone should simply be allowed to withdraw their funds *)
-          UpdateCounter id sub_operation;
-          ReturnFunds id _sender
-        | False =>
-          (* the auction finished without being canceled *)
-          is_owner = builtin eq owner _sender;
-          match is_owner with
+          match is_highest_bidder with
           | True =>
-            match is_highest_bidder with
-            | True =>
-              (* Returns the NFT token again owner. *)
-              TransferNFT _sender token_id;
-              delete bid_count[id];
-              delete auctions[id]
-            | False =>
-              some_bid_amount <- funds_by_bidder[highest_bidder][id];
-              (* the auction's owner should be allowed to withdraw the highestBindingBid *)
-              new_owner_has_withdrawn = True;
-              new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
-              auctions[id] := new_auction;
-
-              amount = option_uint128 zero128 some_bid_amount;
-              com = builtin mul dev_commission amount;
-              com = builtin div com one_hundred128;
-              value = builtin sub amount com;
-
-              delete funds_by_bidder[highest_bidder][id];
-
-              CallTransferDMZ owner value;
-              CallTransferDMZ wallet com
-            end
+            err = CodeIsOwner;
+            ThrowError err
           | False =>
-            UpdateCounter id sub_operation;
+            some_bid_amount <- funds_by_bidder[highest_bidder][id];
+            (* the auction's owner should be allowed to withdraw the highestBindingBid *)
+            new_owner_has_withdrawn = True;
+            new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
+            auctions[id] := new_auction;
+
+            amount = option_uint128 zero128 some_bid_amount;
+            com = builtin mul dev_commission amount;
+            com = builtin div com one_hundred128;
+            value = builtin sub amount com;
+
+            delete funds_by_bidder[highest_bidder][id];
+
+            CallTransferDMZ owner value;
+            CallTransferDMZ wallet com
+          end
+        | False =>
+          match canceled with
+          | True =>
+            (* if the auction was canceled, everyone should simply be allowed to withdraw their funds *)
+            ReturnFunds id _sender
+          | False =>
             match is_highest_bidder with
             | True =>
               (* the highest bidder should only be allowed to withdraw the NFT token. *)
