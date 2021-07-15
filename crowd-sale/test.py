@@ -34,7 +34,7 @@ def buy(amount):
   b = get_pool_balance(total_supply)
   price = get_price(total_supply, b)
   count = get_count(amount, price)
-
+  print(price // DECIMAL)
   return (price, count)
 
 
