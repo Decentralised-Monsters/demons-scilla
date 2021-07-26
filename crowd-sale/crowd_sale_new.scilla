@@ -68,7 +68,9 @@ let get_price =
   fun (price: Uint256) =>
     let ts_dec = builtin div ts b in
     let ts_dec = builtin add ts_dec one256 in
-      builtin mul ts_dec price
+    let p = builtin mul ts_dec price in
+    let some_amount = builtin to_uint128 p in
+      option_uint128 zero128 some_amount
 
 let get_count =
   fun (a: Uint128) =>
@@ -208,8 +210,8 @@ transition Buy()
   decimal_value <- decimal;
   price_value <- price;
 
-  price = get_price total_supply decimal_value price_value;
-  count = get_count _amount price;
+  price_amount = get_price total_supply decimal_value price_value;
+  count = get_count _amount price_amount;
   is_zero = builtin eq count zero128;
 
   match is_zero with
@@ -219,7 +221,7 @@ transition Buy()
   | False =>
     accept;
 
-    change = change_of_coins count price _amount;
+    change = change_of_coins count price_amount _amount;
 
     AddFunds _sender change;
 
