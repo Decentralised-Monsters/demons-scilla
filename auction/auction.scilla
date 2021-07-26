@@ -408,6 +408,11 @@ transition PlaceBid(id: Uint256, amount: Uint128)
       (* highestBidder and is just increasing their maximum bid). *)
       some_highest_bid <- funds_by_bidder[highest_bidder][id];
       highest_bid = option_uint128 zero128 some_highest_bid;
+
+      (* the highest bid might be zero if this listing is the first time that someone has bid *)
+      (* funds_by_bidder[highest_bidder] would return 0 *)
+      is_highest_bid_zero = builtin eq highest_bid zero128;
+
       match static with
       | StaticAuction owner bid_increment start_block end_block token_id =>
         OnlyAfterStart start_block current_block;
@@ -424,27 +429,38 @@ transition PlaceBid(id: Uint256, amount: Uint128)
         is_overbid = orb is_less is_eq;
         funds_by_bidder[_sender][id] := new_bid;
 
-        match is_overbid with
+        match is_highest_bid_zero with
         | True =>
-          (* if the user has overbid the highestBindingBid but not the highestBid, we simply *)
-          (* increase the highestBindingBid and leave highestBidder alone. *)
-          (* note that this case is impossible if _sender == highestBidder because you can never *)
-          (* bid less DMZ than you've already bid. *)
-          new_highest_binding_bid = builtin add new_bid bid_increment;
-          new_highest_binding_bid = min new_highest_binding_bid highest_bid;
-          new_auction = Auction canceled new_highest_binding_bid highest_bidder owner_has_withdrawn static;
-          auctions[id] := new_auction;
-          EmitBidEvent new_highest_binding_bid highest_bidder
-        | False =>
-          (* if msg.sender is already the highest bidder, they must simply be wanting to raise *)
-          (* their maximum bid, in which case we shouldn't increase the highestBindingBid. *)
-          (* if the user is NOT highestBidder, and has overbid highestBid completely, we set them *)
-          (* as the new highestBidder and recalculate highestBindingBid. *)
-          new_highest_binding_bid = builtin add highest_bid bid_increment;
-          new_highest_binding_bid = min new_bid new_highest_binding_bid;
+          (* no existings bids *)
+          (* set the bidder as the highest bidder and highest bid *)
+          new_highest_binding_bid = new_bid;
           new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
           auctions[id] := new_auction;
           EmitBidEvent new_highest_binding_bid _sender
+        | False =>
+          (* listing has existing bids *)
+          match is_overbid with
+          | True =>
+            (* if the user has overbid the highestBindingBid but not the highestBid, we simply *)
+            (* increase the highestBindingBid and leave highestBidder alone. *)
+            (* note that this case is impossible if _sender == highestBidder because you can never *)
+            (* bid less DMZ than you've already bid. *)
+            new_highest_binding_bid = builtin add new_bid bid_increment;
+            new_highest_binding_bid = min new_highest_binding_bid highest_bid;
+            new_auction = Auction canceled new_highest_binding_bid highest_bidder owner_has_withdrawn static;
+            auctions[id] := new_auction;
+            EmitBidEvent new_highest_binding_bid highest_bidder
+          | False =>
+            (* if msg.sender is already the highest bidder, they must simply be wanting to raise *)
+            (* their maximum bid, in which case we shouldn't increase the highestBindingBid. *)
+            (* if the user is NOT highestBidder, and has overbid highestBid completely, we set them *)
+            (* as the new highestBidder and recalculate highestBindingBid. *)
+            new_highest_binding_bid = builtin add highest_bid bid_increment;
+            new_highest_binding_bid = min new_bid new_highest_binding_bid;
+            new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
+            auctions[id] := new_auction;
+            EmitBidEvent new_highest_binding_bid _sender
+          end
         end
       end
     end
