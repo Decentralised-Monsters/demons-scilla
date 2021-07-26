@@ -5,7 +5,7 @@ scilla_version 0
 (***************************************************)
 import ListUtils
 
-library BondingCurvedDistributor
+library LineCurvedDistributor
 
 (* Error events *)
 type Error =
@@ -83,7 +83,7 @@ let change_of_coins =
 (*             The contract definition             *)
 (***************************************************)
 
-contract BondingCurvedDistributor
+contract LineCurvedDistributor
 (
   contract_owner: ByStr20,
   wallet: ByStr20,
