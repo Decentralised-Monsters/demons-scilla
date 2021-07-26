@@ -14,14 +14,10 @@ type Error =
   | CodeNotContractOwner
   | CodeNotFound
 
-let customization = Uint256 100000000000
-let exponent = Uint32 2
 let zero256 = Uint256 0
 let zero128 = Uint128 0
 let one256 = Uint256 1
-let one32 = Uint32 1
 let one128 = Uint128 1
-let nil_str_list = Nil {String}
 
 let one_msg = 
   fun (msg : Message) => 
@@ -51,17 +47,12 @@ let option_value =
 
 let option_uint256 = @option_value Uint256
 let option_uint128 = @option_value Uint128
-let option_uint32 = @option_value Uint32
-let str_append = @list_append String
 
 let to_256 =
   fun (v: Uint32) =>
     let v32 = builtin to_uint256 v in
       option_uint256 zero256 v32
 
-(* p = (customization / exponent + 1 * (s + k) ** exponent + 1) - b *)
-(* s - total_supply *)
-(* b - poolBalance *)
 let get_price =
   fun (ts: Uint256) =>
   fun (b: Uint256) =>
@@ -110,7 +101,7 @@ field total: Uint256 = zero256
 
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
 field decimal: Uint256 = Uint256 26
-field price: Uint256 = Uint256 7500000000000000000000
+field price: Uint256 = Uint256 7500000000000000
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -203,6 +194,16 @@ end
 transition AddReserveList(token_uris_list: List String)
   IsContractOwner;
   forall token_uris_list AddReserve
+end
+
+transition ChangePrice(value: Uint256)
+  IsContractOwner;
+  price := value
+end
+
+transition ChangeDecimal(value: Uint256)
+  IsContractOwner;
+  decimal := value
 end
 
 transition Buy()
