@@ -16,6 +16,7 @@ type Error =
 | CodeNotFound
 | CodeNotEndedOrCanceled
 | CodeOnlyWithdrawn
+| CodeNotTokenOwner
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -68,6 +69,7 @@ let make_error =
       | CodeIsOwner            => Int32 -8
       | CodeNotEndedOrCanceled => Int32 -9
       | CodeOnlyWithdrawn      => Int32 -10
+      | CodeNotTokenOwner      => Int32 -11
       end
     in
     { _exception : "Error"; code : result_code }
@@ -268,6 +270,20 @@ procedure CheckStartBlock(start_block: BNum, end_block: BNum, current_block: BNu
   end
 end
 
+
+procedure CheckTokenOwner(token_id: Uint256)
+  some_token_owner <-& main.token_owners[token_id];
+  dragon_owner = option_address zero_address some_token_owner;
+  is_address_call = builtin eq _sender dragon_owner;
+  match is_address_call with
+  | False =>
+    err = CodeNotTokenOwner;
+    ThrowError err
+  | True =>
+  end
+end
+
+
 procedure UpdateCounter(id: Uint256, op: Operation)
   some_bid_count <- bid_count[id];
 
@@ -354,8 +370,15 @@ procedure TransferNFT(to: ByStr20, token_id: Uint256)
   send msgs
 end
 
-
+(* @dev Put up a card for auction listing *)
+(* @param bid_increment: Min increment for each bid *)
+(* @param min_price: Starting bid price *)
+(* @param start_block: Block number at which the auction should begin *)
+(* @param end_block: Block number at which the auction should end *)
+(* @param token_id: Token/Card put up for listing *)
 transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
+  CheckTokenOwner token_id;
+
   current_block <-& BLOCKNUMBER;
   total_ids <- total;
 
@@ -384,6 +407,11 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
   event e
 end
 
+(* @dev Bid on an auction listing. DMZ are locked up until Withdraw() is invoked *)
+(* @param id: Auction id *)
+(* @param amount: Bid amount (DMZ amount); if _sender is the first time bidding on this card, the bid amount is the ENTIRE amount *)
+(* If _sender has bidded before, then _sender has intention to raise his/her previous bid
+(* bid amount becomes the DIFFERENCE of _sender's previous bid and current bid *)
 transition PlaceBid(id: Uint256, amount: Uint128)
   current_block <-& BLOCKNUMBER;
   some_current_bid <- funds_by_bidder[_sender][id];
@@ -392,12 +420,6 @@ transition PlaceBid(id: Uint256, amount: Uint128)
   (* plus whatever has been sent with this transaction *)
   current_bid = option_uint128 zero128 some_current_bid;
   new_bid = builtin add current_bid amount;
-
-  match some_current_bid with
-  | Some current_bid =>
-  | None =>
-    UpdateCounter id add_operation
-  end;
 
   match some_auction with
   | Some auction =>
@@ -419,14 +441,24 @@ transition PlaceBid(id: Uint256, amount: Uint128)
         OnlyBeforeEnd end_block current_block;
         OnlyNotOwner owner;
         CheckBipAmount new_bid highest_binding_bid;
+
+        (* update bid count only after checks *)
+        match some_current_bid with
+        | Some current_bid =>
+        | None =>
+          UpdateCounter id add_operation
+        end;
+
+        (* transfer the required dmz to this contract *)
         CallTransferFromDMZ amount _sender _this_address;
+
         (* if the user has overbid the highestBindingBid but not the highestBid, we simply *)
         (* increase the highestBindingBid and leave highestBidder alone. *)
         (* note that this case is impossible if _sender == highestBidder because you can never *)
         (* bid less DMZ than you've already bid. *)
         is_less = builtin lt new_bid highest_bid;
         is_eq = builtin eq new_bid highest_bid;
-        is_overbid = orb is_less is_eq;
+        is_raise_self_bid = orb is_less is_eq;
         funds_by_bidder[_sender][id] := new_bid;
 
         match is_highest_bid_zero with
@@ -439,8 +471,9 @@ transition PlaceBid(id: Uint256, amount: Uint128)
           EmitBidEvent new_highest_binding_bid _sender
         | False =>
           (* listing has existing bids *)
-          match is_overbid with
+          match is_raise_self_bid with
           | True =>
+            (* user has bid less than highest bid *)
             (* if the user has overbid the highestBindingBid but not the highestBid, we simply *)
             (* increase the highestBindingBid and leave highestBidder alone. *)
             (* note that this case is impossible if _sender == highestBidder because you can never *)
@@ -451,10 +484,8 @@ transition PlaceBid(id: Uint256, amount: Uint128)
             auctions[id] := new_auction;
             EmitBidEvent new_highest_binding_bid highest_bidder
           | False =>
-            (* if msg.sender is already the highest bidder, they must simply be wanting to raise *)
-            (* their maximum bid, in which case we shouldn't increase the highestBindingBid. *)
-            (* if the user is NOT highestBidder, and has overbid highestBid completely, we set them *)
-            (* as the new highestBidder and recalculate highestBindingBid. *)
+            (* user has bid more than highest bid *)
+            (* set user as the new highestBidder and recalculate highestBindingBid. *)
             new_highest_binding_bid = builtin add highest_bid bid_increment;
             new_highest_binding_bid = min new_bid new_highest_binding_bid;
             new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
