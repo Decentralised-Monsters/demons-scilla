@@ -3,8 +3,6 @@ scilla_version 0
 (***************************************************)
 (*               Associated library                *)
 (***************************************************)
-import ListUtils
-
 library LineCurvedDistributor
 
 (* Error events *)
@@ -45,13 +43,7 @@ let option_value =
     | None => default
     end
 
-let option_uint256 = @option_value Uint256
 let option_uint128 = @option_value Uint128
-
-let to_256 =
-  fun (v: Uint32) =>
-    let v32 = builtin to_uint256 v in
-      option_uint256 zero256 v32
 
 let get_price =
   fun (ts: Uint256) =>
@@ -230,7 +222,7 @@ transition Buy()
   end
 end
 
-transition ReturnFunds()
+transition TransferZilsToWallet()
   bal <- _balance;
 
   AddFunds wallet bal

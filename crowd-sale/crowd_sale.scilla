@@ -242,7 +242,7 @@ transition Buy()
   end
 end
 
-transition ReturnFunds()
+transition TransferZilsToWallet()
   bal <- _balance;
 
   AddFunds wallet bal
