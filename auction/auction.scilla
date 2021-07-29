@@ -17,6 +17,7 @@ type Error =
 | CodeNotEndedOrCanceled
 | CodeOnlyWithdrawn
 | CodeNotTokenOwner
+| CodeAuctionHasBid
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -70,6 +71,7 @@ let make_error =
       | CodeNotEndedOrCanceled => Int32 -9
       | CodeOnlyWithdrawn      => Int32 -10
       | CodeNotTokenOwner      => Int32 -11
+      | CodeAuctionHasBid      => Int32 -12
       end
     in
     { _exception : "Error"; code : result_code }
@@ -378,6 +380,7 @@ end
 (* @param token_id: Token/Card put up for listing *)
 transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
   CheckTokenOwner token_id;
+  (* TODO: check if there is an existing auction with the same token_id? *)
 
   current_block <-& BLOCKNUMBER;
   total_ids <- total;
@@ -501,6 +504,8 @@ transition PlaceBid(id: Uint256, amount: Uint128)
   end
 end
 
+(* @dev Allows the owner to drop the auction listing if the auction has no bids and still within the time limit *)
+(* @param id: Auction id to cancel *)
 transition CancelAuction(id: Uint256)
   current_block <-& BLOCKNUMBER;
   some_auction <- auctions[id];
@@ -515,16 +520,31 @@ transition CancelAuction(id: Uint256)
         OnlyOwner owner;
         OnlyBeforeEnd end_block current_block;
 
-        new_canceled = True;
-        new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
-        auctions[id] := new_auction;
-        UpdateCounter id sub_operation;
-        TransferNFT _sender token_id;
-        e = {
-          _eventname: "CanceledEventSuccess";
-          id: id
-        };
-        event e
+        (* check if highest bidder is owner *)
+        (* if so, this implies no one has bid; can proceed with cancelling *)
+        (* otherwise if there is at least one bid, owner is not allowed to cancel auction *)
+        allow_to_cancel = builtin eq highest_bidder owner;
+
+        match allow_to_cancel with
+        | True =>
+          (* highest bidder == owner; no one has yet to place a bid on this listing *)
+          (* go ahead with cancel process *)
+          new_canceled = True;
+          new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
+          auctions[id] := new_auction;
+          UpdateCounter id sub_operation;
+          TransferNFT _sender token_id;
+          e = {
+            _eventname: "CanceledEventSuccess";
+            id: id
+          };
+          event e
+        | False =>
+          (* highest bidder is not owner; someone has place a bid on this listing *)
+          (* not allow to cancel *)
+          err = CodeAuctionHasBid;
+          ThrowError err
+        end
       end
     end
   | None =>
@@ -599,6 +619,7 @@ transition Withdraw(id: Uint256)
   end
 end
 
+(* @dev Sets a new commision value *)
 transition SetCommission(value: Uint128)
   IsContractOwner;
 
