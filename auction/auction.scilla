@@ -18,6 +18,8 @@ type Error =
 | CodeOnlyWithdrawn
 | CodeNotTokenOwner
 | CodeAuctionHasBid
+| CodeNotEnded
+| CodeTokenAlreadyInAuction
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -60,18 +62,20 @@ let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotContractOwner   => Int32 -1
-      | CodeBlockGap           => Int32 -2
-      | CodeNotStartedYet      => Int32 -3
-      | CodeAlreadyCanceled    => Int32 -4
-      | CodeTimeOut            => Int32 -5
-      | CodeBipLessThanCurrent => Int32 -6
-      | CodeNotFound           => Int32 -7
-      | CodeIsOwner            => Int32 -8
-      | CodeNotEndedOrCanceled => Int32 -9
-      | CodeOnlyWithdrawn      => Int32 -10
-      | CodeNotTokenOwner      => Int32 -11
-      | CodeAuctionHasBid      => Int32 -12
+      | CodeNotContractOwner        => Int32 -1
+      | CodeBlockGap                => Int32 -2
+      | CodeNotStartedYet           => Int32 -3
+      | CodeAlreadyCanceled         => Int32 -4
+      | CodeTimeOut                 => Int32 -5
+      | CodeBipLessThanCurrent      => Int32 -6
+      | CodeNotFound                => Int32 -7
+      | CodeIsOwner                 => Int32 -8
+      | CodeNotEndedOrCanceled      => Int32 -9
+      | CodeOnlyWithdrawn           => Int32 -10
+      | CodeNotTokenOwner           => Int32 -11
+      | CodeAuctionHasBid           => Int32 -12
+      | CodeNotEnded                => Int32 -13
+      | CodeTokenAlreadyInAuction   => Int32 -14
       end
     in
     { _exception : "Error"; code : result_code }
@@ -142,6 +146,8 @@ field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128)
 
 field auctions: Map Uint256 Auction = Emp Uint256 Auction
 field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
+(* token_id to auction_id mapping for quick check if card is already up for auction *)
+field token_auctions: Map Uint256 Uint256 = Emp Uint256 Uint256
 field total: Uint256 = zero256
 field commission: Uint128 = Uint128 10
 
@@ -209,6 +215,18 @@ procedure OnlyBeforeEnd(end_block: BNum, current: BNum)
     err = CodeTimeOut;
     ThrowError err
   | False =>
+  end
+end
+
+procedure OnlyEnded(end_block: BNum, current: BNum)
+  is_ended = builtin blt end_block current;
+  match is_ended with
+  | True =>
+  | False =>
+    (* end_block is not less than current_block *)
+    (* auction has not ended yet *)
+    err = CodeNotEnded;
+    ThrowError err
   end
 end
 
@@ -381,39 +399,50 @@ end
 transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
   CheckTokenOwner token_id;
   (* TODO: check if there is an existing auction with the same token_id? *)
+  (* TODO: check if there is an existing marketplace with the same token_id? *)
 
   current_block <-& BLOCKNUMBER;
   total_ids <- total;
+  auction_id <- token_auctions[token_id];
 
   CheckStartBlock start_block end_block current_block;
+  
+  match auction_id with
+  | Some auction =>
+    (* card has already been placed on auction *)
+    (* either the auction is on-going or has ended but the card has not yet transferred to winner *)
+    err = CodeTokenAlreadyInAuction;
+    ThrowError err
+  | None =>
+    next_id = builtin add total_ids one256;
+    new_auction = auction_build
+      _sender
+      bid_increment
+      min_price
+      start_block
+      end_block
+      token_id;
 
-  next_id = builtin add total_ids one256;
-  new_auction = auction_build
-    _sender
-    bid_increment
-    min_price
-    start_block
-    end_block
-    token_id;
+    auctions[next_id] := new_auction;
+    token_auctions[token_id] := next_id;
+    total := next_id;
+    bid_count[next_id] := one64;
 
-  auctions[next_id] := new_auction;
-  total := next_id;
-  bid_count[next_id] := one64;
+    TransferFromNFT _this_address token_id;
 
-  TransferFromNFT _this_address token_id;
-
-  e = {
-    _eventname: "AuctionCreated";
-    owner: _sender;
-    auction: new_auction
-  };
-  event e
+    e = {
+      _eventname: "AuctionCreated";
+      owner: _sender;
+      auction: new_auction
+    };
+    event e
+  end
 end
 
 (* @dev Bid on an auction listing. DMZ are locked up until Withdraw() is invoked *)
 (* @param id: Auction id *)
 (* @param amount: Bid amount (DMZ amount); if _sender is the first time bidding on this card, the bid amount is the ENTIRE amount *)
-(* If _sender has bidded before, then _sender has intention to raise his/her previous bid
+(* If _sender has bidded before, then _sender has intention to raise his/her previous bid *)
 (* bid amount becomes the DIFFERENCE of _sender's previous bid and current bid *)
 transition PlaceBid(id: Uint256, amount: Uint128)
   current_block <-& BLOCKNUMBER;
@@ -534,6 +563,7 @@ transition CancelAuction(id: Uint256)
           auctions[id] := new_auction;
           UpdateCounter id sub_operation;
           TransferNFT _sender token_id;
+          delete token_auctions[token_id];
           e = {
             _eventname: "CanceledEventSuccess";
             id: id
@@ -553,6 +583,13 @@ transition CancelAuction(id: Uint256)
   end
 end
 
+
+(* @dev Allows owner and bidders to claim their bids after auction has ended *)
+(* The owner would receive the winning bid amount minus the commission *)
+(* The one who wins the bid would receive their card. *)
+(* The rest would receive back their bids *)
+(* The auction listing here would definitely have at least one bid; because if the owner has cancelled it prior to end, the auction wouldn't exist *)
+(* @param id: Auction id to claim from *)
 transition Withdraw(id: Uint256)
   current_block <-& BLOCKNUMBER;
   some_auction <- auctions[id];
@@ -564,7 +601,7 @@ transition Withdraw(id: Uint256)
     | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
       match static with
       | StaticAuction owner bid_increment start_block end_block token_id =>
-        OnlyEndedOrCanceled canceled end_block current_block;
+        OnlyEnded end_block current_block;
 
         is_highest_bidder = builtin eq highest_bidder _sender;
         is_owner = builtin eq owner _sender;
@@ -574,9 +611,11 @@ transition Withdraw(id: Uint256)
         | True =>
           match is_highest_bidder with
           | True =>
+            (* not possible to reach here because there is at least one bid *)
             err = CodeIsOwner;
             ThrowError err
           | False =>
+            (* owner claiming the winning bid *)
             some_bid_amount <- funds_by_bidder[highest_bidder][id];
             (* the auction's owner should be allowed to withdraw the highestBindingBid *)
             new_owner_has_withdrawn = True;
@@ -594,21 +633,17 @@ transition Withdraw(id: Uint256)
             CallTransferDMZ wallet com
           end
         | False =>
-          match canceled with
+          (* other bidders *)
+          match is_highest_bidder with
           | True =>
-            (* if the auction was canceled, everyone should simply be allowed to withdraw their funds *)
-            ReturnFunds id _sender
+            (* user is highest bidder; transfer card ownership to winner *)
+            (* remove the token_id mapping to allow new owner to place it for auction *)
+            delete token_auctions[token_id];
+            TransferNFT _sender token_id
           | False =>
-            match is_highest_bidder with
-            | True =>
-              (* the highest bidder should only be allowed to withdraw the NFT token. *)
-              TransferNFT _sender token_id
-            | False =>
-              (* anyone who participated but did not win the auction should be allowed to withdraw *)
-              (* the full amount of their funds *)
-              delete funds_by_bidder[_sender][id];
-              ReturnFunds id _sender
-            end
+            (* user did not win bid; refund back locked up DMZ *)
+            delete funds_by_bidder[_sender][id];
+            ReturnFunds id _sender
           end
         end
       end
