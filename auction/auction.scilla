@@ -398,7 +398,7 @@ end
 (* @param token_id: Token/Card put up for listing *)
 transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
   CheckTokenOwner token_id;
-  (* TODO: check if there is an existing auction with the same token_id? *)
+
   (* TODO: check if there is an existing marketplace with the same token_id? *)
 
   current_block <-& BLOCKNUMBER;
@@ -638,8 +638,8 @@ transition Withdraw(id: Uint256)
           | True =>
             (* user is highest bidder; transfer card ownership to winner *)
             (* remove the token_id mapping to allow new owner to place it for auction *)
-            delete token_auctions[token_id];
-            TransferNFT _sender token_id
+            TransferNFT _sender token_id;
+            delete token_auctions[token_id]
           | False =>
             (* user did not win bid; refund back locked up DMZ *)
             delete funds_by_bidder[_sender][id];
