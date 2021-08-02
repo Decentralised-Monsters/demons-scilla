@@ -199,7 +199,7 @@ example: [viewblock](https://viewblock.io/zilliqa/tx/4665571b18bdb0acad2f105212a
 
 ### 7: [Deploy Auction contract:](https://github.com/hicaru/demons-scilla/tree/master/auction)
 
-Before deploying auction contract, we need to deploy [dummy marketplace contract](/marketplace/dummy_marketplace.scilla). Why? Because the auction contract requires the marketplace contract address as immutable field. We can deploy auction or marketplace first, but anyhow we need one of it to be dummy first.
+Before deploying auction contract, we need to deploy [dummy marketplace contract](/market-place/dummy_marketplace.scilla). Why? Because the auction contract requires the marketplace contract address as immutable field. We can deploy auction or marketplace first, but anyhow we need one of it to be dummy first.
 
 Example, deploy auction contract first:
 ```
