@@ -1,0 +1,9 @@
+scilla_version 0
+
+library DummyAuction
+
+(* dummy auction contract for used when deploying a new marketplace contract *)
+(* after the real auction contract is deployed, invoke UpdateAuctionListing() to update the address in the marketplace contract *)
+contract DummyAuction()
+
+field token_auctions : Map Uint256 Uint256 = Emp Uint256 Uint256

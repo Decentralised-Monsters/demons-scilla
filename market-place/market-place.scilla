@@ -51,6 +51,7 @@ type Error =
   | CodeNotAuthorized
   | CodeNotTokenOwner
   | CodePauseNotPause
+  | CodeTokenListedInAuction
 
 let make_error =
   fun (result : Error) =>
@@ -63,6 +64,7 @@ let make_error =
       | CodeNotAuthorized            => Int32 -5
       | CodeNotTokenOwner            => Int32 -6
       | CodePauseNotPause            => Int32 -7
+      | CodeTokenListedInAuction     => Int32 -8
       end
     in
     { _exception : "Error"; code : result_code }
@@ -79,8 +81,16 @@ contract MarketPlace
   main: ByStr20 with contract
     field token_owners: Map Uint256 ByStr20,
     field token_approvals: Map Uint256 ByStr20
+  end,
+  init_auction: ByStr20 with contract
+    field token_auctions: Map Uint256 Uint256
   end
 )
+
+
+field auction_listing: ByStr20 with contract
+  field token_auctions: Map Uint256 Uint256
+end = init_auction
 
 field pause: Uint32 = not_pause
 (*Order IDs - use global variable to track order numbers *)
@@ -88,6 +98,8 @@ field order_id : Uint256 = Uint256 0
 (* Orderbook: mapping (order_id => ( Order struct )) *)
 field orderbook : Map Uint256 Order
                   = Emp Uint256 Order
+(* token_id to order_id mapping for quick check if card is already on sale *)
+field token_orderbook : Map Uint256 Uint256 = Emp Uint256 Uint256 
 (* Fee taken from each purchase, 1/20 or 5% of price *)
 field marketplace_fee: Uint128 = Uint128 20
 
@@ -185,6 +197,20 @@ procedure CancelOrder(cancel_order_id: Uint256)
   end
 end
 
+(* check if token_id is already in auction contract *)
+procedure CheckAuctionListing(token_id: Uint256)
+  current_auction_listing <- auction_listing;
+  auction_id <-& current_auction_listing.token_auctions[token_id];
+  
+  match auction_id with
+  | Some id =>
+    err = CodeTokenListedInAuction;
+    ThrowError err
+  | None =>
+  end
+end
+
+
 procedure CheckTokenOwner(token_id: Uint256)
   some_token_owner <-& main.token_owners[token_id];
   dragon_owner = option_address zero_address some_token_owner;
@@ -202,6 +228,7 @@ end
 (* then it will check if approval is okay, if so, then it will transfer Dragon to itself, *)
 (* and create the listing information and publish it as an item for sale *)
 transition Sell(token_id: Uint256, price: Uint128)
+  CheckAuctionListing token_id;
   CheckPause not_pause;
   CheckApproved token_id;
   CheckTokenOwner token_id;
@@ -210,6 +237,7 @@ transition Sell(token_id: Uint256, price: Uint128)
   current_order_id <- order_id;
   new_order = Order _sender price token_id current_order_id;
   orderbook[current_order_id] := new_order;
+  token_orderbook[token_id] := current_order_id;
 
   new_order_id = builtin add current_order_id one;
   order_id := new_order_id
@@ -231,6 +259,7 @@ transition Purchase(purchase_order_id: Uint256)
       CallTransferFromDMZ fees _sender wallet;
       (* Delete the order from the orderbook*)
       delete orderbook[item_order_id];
+      delete token_orderbook[token_id];
       (* transfer to new owner*)
       TransferToOwner token_id _sender;
       e = {
@@ -262,6 +291,7 @@ transition CancelListing(cancel_order_id : Uint256)
     | True => 
       (*Go ahead delete the order and return Dragon*)
       delete orderbook[item_order_id];
+      delete token_orderbook[token_id];
       e = {
         _eventname: "OrderCanceled";
         extracted_order: item_order_id
@@ -312,6 +342,14 @@ transition ChangePause()
     e = {_eventname : "Paused"};
     event e
   end
+end
+
+(* @dev Updates the marketplace contract address; used only by contract owner *)
+transition UpdateAuctionListing(new_auction: ByStr20 with contract field token_auctions: Map Uint256 Uint256 end)
+  IsContractOwner;
+  auction_listing := new_auction;
+  e = {_eventname : "UpdateAuctionListing"; new_auction_listing: new_auction};
+  event e
 end
 
 (*Empty callbacks*)

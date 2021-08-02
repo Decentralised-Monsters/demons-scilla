@@ -1,0 +1,10 @@
+scilla_version 0
+
+library DummyMarketplace
+
+
+(* dummy marketplace contract for used when deploying a new auction contract *)
+(* after the real marketplace contract is deployed, invoke UpdateDirectListing() to update the address in the auction contract *)
+contract DummyMarketplace()
+
+field token_orderbook : Map Uint256 Uint256 = Emp Uint256 Uint256 
