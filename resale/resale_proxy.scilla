@@ -1,0 +1,113 @@
+scilla_version 0
+
+(*************************************************************************************)
+(* This contract is used to invoke the marketplace's Sell() and auction's PlaceBid() *)
+(* The reason for a separate contract is the fact that the marketplace have to check *)
+(* that a card is not listed on the auction side and vice versa for the auction      *)
+(*************************************************************************************)
+import IntUtils
+
+library ResaleProxy
+
+(* Error events *)
+type Error =
+| CodeNotContractOwner
+| CodeTokenAlreadyInDirectSale
+| CodeTokenAlreadyInAuction
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeNotContractOwner          => Int32 -1
+      | CodeTokenAlreadyInDirectSale  => Int32 -2
+      | CodeTokenAlreadyInAuction     => Int32 -3
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+
+let one_msg = 
+    fun (msg : Message) => 
+    let nil_msg = Nil {Message} in
+        Cons {Message} msg nil_msg
+
+let two_msgs =
+  fun (msg1 : Message) =>
+  fun (msg2 : Message) =>
+    let msgs_tmp = one_msg msg2 in
+      Cons {Message} msg1 msgs_tmp
+
+let zero = Uint128 0
+
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+
+contract ResaleProxy
+(
+    contract_owner: ByStr20,
+    marketplace: ByStr20 with contract
+      field token_orderbook: Map Uint256 Uint256
+    end,
+    auction: ByStr20 with contract
+      field token_auctions: Map Uint256 Uint256
+    end
+)
+
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+
+(* @dev Invoke the auction CreateAuction() transition *)
+transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
+  order_listing <-& marketplace.token_orderbook[token_id];
+
+  match order_listing with
+  | Some listing =>
+    err = CodeTokenAlreadyInDirectSale;
+    ThrowError err
+  | None =>
+    tag = "CreateAuction";
+    msg = {
+        _tag: tag; 
+        _recipient: auction; 
+        _amount: zero; 
+        bid_increment: bid_increment;
+        min_price: min_price;
+        start_block: start_block;
+        end_block: end_block;
+        token_id: token_id;
+        initiator: _sender
+    };
+    msgs = one_msg msg;
+    send msgs
+  end
+end
+
+(* @dev Invoke the marketplace Sell() transition *)
+transition CreateDirectSale(token_id: Uint256, price: Uint128)
+  auction_listing <-& auction.token_auctions[token_id];
+
+  match auction_listing with
+  | Some listing =>
+    err = CodeTokenAlreadyInAuction;
+    ThrowError err
+  | None =>
+    tag = "Sell";
+    msg = {
+        _tag: tag; 
+        _recipient: auction; 
+        _amount: zero; 
+        token_id: token_id;
+        price: price;
+        initiator: _sender
+    };
+    msgs = one_msg msg;
+    send msgs
+  end
+end
