@@ -422,8 +422,6 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
   CheckDirectListing token_id;
   CheckTokenOwner token_id;
 
-  (* TODO: check if there is an existing marketplace with the same token_id? *)
-
   current_block <-& BLOCKNUMBER;
   total_ids <- total;
   auction_id <- token_auctions[token_id];
