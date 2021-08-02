@@ -20,7 +20,7 @@ type Error =
 | CodeAuctionHasBid
 | CodeNotEnded
 | CodeTokenAlreadyInAuction
-| CodeProxyValidationFailed
+| CodeTokenListedInDirectSale
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -63,21 +63,21 @@ let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotContractOwner        => Int32 -1
-      | CodeBlockGap                => Int32 -2
-      | CodeNotStartedYet           => Int32 -3
-      | CodeAlreadyCanceled         => Int32 -4
-      | CodeTimeOut                 => Int32 -5
-      | CodeBipLessThanCurrent      => Int32 -6
-      | CodeNotFound                => Int32 -7
-      | CodeIsOwner                 => Int32 -8
-      | CodeNotEndedOrCanceled      => Int32 -9
-      | CodeOnlyWithdrawn           => Int32 -10
-      | CodeNotTokenOwner           => Int32 -11
-      | CodeAuctionHasBid           => Int32 -12
-      | CodeNotEnded                => Int32 -13
-      | CodeTokenAlreadyInAuction   => Int32 -14
-      | CodeProxyValidationFailed   => Int32 -15
+      | CodeNotContractOwner         => Int32 -1
+      | CodeBlockGap                 => Int32 -2
+      | CodeNotStartedYet            => Int32 -3
+      | CodeAlreadyCanceled          => Int32 -4
+      | CodeTimeOut                  => Int32 -5
+      | CodeBipLessThanCurrent       => Int32 -6
+      | CodeNotFound                 => Int32 -7
+      | CodeIsOwner                  => Int32 -8
+      | CodeNotEndedOrCanceled       => Int32 -9
+      | CodeOnlyWithdrawn            => Int32 -10
+      | CodeNotTokenOwner            => Int32 -11
+      | CodeAuctionHasBid            => Int32 -12
+      | CodeNotEnded                 => Int32 -13
+      | CodeTokenAlreadyInAuction    => Int32 -14
+      | CodeTokenListedInDirectSale  => Int32 -15
       end
     in
     { _exception : "Error"; code : result_code }
@@ -135,16 +135,21 @@ let min =
 contract AuctionFactory
 (
   contract_owner: ByStr20,
-  init_resale_proxy_address: ByStr20,
   wallet: ByStr20,
   dmz: ByStr20,
   main: ByStr20 with contract
     field token_owners: Map Uint256 ByStr20
+  end,
+  init_marketplace: ByStr20 with contract
+    field token_orderbook: Map Uint256 Uint256 
   end
 )
 
 (* Mutable fields *)
-field resale_proxy: ByStr20 = init_resale_proxy_address
+field direct_listing: ByStr20 with contract 
+  field token_orderbook: Map Uint256 Uint256 
+end = init_marketplace
+
 field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128) 
   = Emp ByStr20 (Map Uint256 Uint128)
 
@@ -170,18 +175,6 @@ procedure IsContractOwner()
     ThrowError err
   end
 end
-
-procedure IsResaleProxy()
-  current_resale_proxy <- resale_proxy;
-  is_proxy = builtin eq _sender current_resale_proxy;
-  match is_proxy with
-  | True  =>
-  | False =>
-    err = CodeProxyValidationFailed;
-    ThrowError err
-  end
-end
-
 
 procedure EmitBidEvent(highest_binding_bid: Uint128, highest_bidder: ByStr20)
   e = {
@@ -292,6 +285,19 @@ procedure CheckBipAmount(bid: Uint128, highest_binding_bid: Uint128)
     ThrowError err
   end
 end
+
+(* check if token_id is already in marketplace contract *)
+procedure CheckDirectListing(token_id: Uint256)
+  current_direct_listing <- direct_listing;
+  order_id <-& current_direct_listing.token_orderbook[token_id];
+  match order_id with
+  | Some id =>
+    err = CodeTokenListedInDirectSale;
+    ThrowError err
+  | None =>
+  end
+end
+
 
 procedure CheckStartBlock(start_block: BNum, end_block: BNum, current_block: BNum)
   is_incorect = blk_gte start_block end_block;
@@ -412,9 +418,8 @@ end
 (* @param start_block: Block number at which the auction should begin *)
 (* @param end_block: Block number at which the auction should end *)
 (* @param token_id: Token/Card put up for listing *)
-(* @param initiator: User address *)
-transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256, initiator: ByStr20)
-  IsResaleProxy;
+transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
+  CheckDirectListing token_id;
   CheckTokenOwner token_id;
 
   (* TODO: check if there is an existing marketplace with the same token_id? *)
@@ -434,7 +439,7 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
   | None =>
     next_id = builtin add total_ids one256;
     new_auction = auction_build
-      initiator
+      _sender
       bid_increment
       min_price
       start_block
@@ -450,7 +455,7 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
 
     e = {
       _eventname: "AuctionCreated";
-      owner: initiator;
+      owner: _sender;
       auction: new_auction
     };
     event e
@@ -675,7 +680,6 @@ end
 (* @dev Sets a new commision value *)
 transition SetCommission(value: Uint128)
   IsContractOwner;
-
   commission := value;
 
   e = {
@@ -685,11 +689,11 @@ transition SetCommission(value: Uint128)
   event e
 end
 
-(* @dev Updates the resale proxy address *)
-transition UpdateResaleProxy(new_proxy: ByStr20)
+(* @dev Updates the marketplace contract address; used only by contract owner *)
+transition UpdateDirectListing(new_marketplace: ByStr20 with contract field token_orderbook: Map Uint256 Uint256 end)
   IsContractOwner;
-  resale_proxy := new_proxy;
-  e = {_eventname : "UpdateResaleProxy"; new_resale_proxy: new_proxy};
+  direct_listing := new_marketplace;
+  e = {_eventname : "UpdateDirectListing"; new_direct_listing: new_marketplace};
   event e
 end
 
