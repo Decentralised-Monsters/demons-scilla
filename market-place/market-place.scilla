@@ -16,12 +16,6 @@ let one_msg =
   let nil_msg = Nil {Message} in
     Cons {Message} msg nil_msg
 
-let two_msgs =
-  fun (msg1 : Message) =>
-  fun (msg2 : Message) =>
-    let msgs_tmp = one_msg msg2 in
-      Cons {Message} msg1 msgs_tmp
-
 let one = Uint256 1
 
 let option_value =
@@ -52,6 +46,7 @@ type Error =
   | CodeNotTokenOwner
   | CodePauseNotPause
   | CodeTokenListedInAuction
+  | CodeTokenAlreadyListed
 
 let make_error =
   fun (result : Error) =>
@@ -65,6 +60,7 @@ let make_error =
       | CodeNotTokenOwner            => Int32 -6
       | CodePauseNotPause            => Int32 -7
       | CodeTokenListedInAuction     => Int32 -8
+      | CodeTokenAlreadyListed       => Int32 -9
       end
     in
     { _exception : "Error"; code : result_code }
@@ -232,15 +228,24 @@ transition Sell(token_id: Uint256, price: Uint128)
   CheckPause not_pause;
   CheckApproved token_id;
   CheckTokenOwner token_id;
-  TransferToMarketPlace token_id;
 
-  current_order_id <- order_id;
-  new_order = Order _sender price token_id current_order_id;
-  orderbook[current_order_id] := new_order;
-  token_orderbook[token_id] := current_order_id;
+  some_order_id <- token_orderbook[token_id];
 
-  new_order_id = builtin add current_order_id one;
-  order_id := new_order_id
+  match some_order_id with
+  | Some existing_order =>
+    (* token_id is already listed on sale *)
+    err = CodeTokenAlreadyListed;
+    ThrowError err
+  | None =>
+    TransferToMarketPlace token_id;
+    current_order_id <- order_id;
+    new_order = Order _sender price token_id current_order_id;
+    orderbook[current_order_id] := new_order;
+    token_orderbook[token_id] := current_order_id;
+
+    new_order_id = builtin add current_order_id one;
+    order_id := new_order_id
+  end
 end
 
 (* Purchase an order/NFT that is for sale*)     
