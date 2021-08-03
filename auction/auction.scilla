@@ -517,8 +517,10 @@ transition PlaceBid(id: Uint256, amount: Uint128)
         match is_highest_bid_zero with
         | True =>
           (* no existings bids *)
-          (* set the bidder as the highest bidder and highest bid *)
-          new_highest_binding_bid = new_bid;
+          (* system auto adjust highest binding bid *)
+          (* set the bidder as the highest bidder *)
+          new_highest_binding_bid = builtin add highest_binding_bid bid_increment;
+          new_highest_binding_bid = min new_highest_binding_bid new_bid;
           new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
           auctions[id] := new_auction;
           EmitBidEvent new_highest_binding_bid _sender
@@ -643,13 +645,16 @@ transition Withdraw(id: Uint256)
             new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
             auctions[id] := new_auction;
 
+            (* winner to pay only highest binding bid, remainder to be refunded *)
             amount = option_uint128 zero128 some_bid_amount;
-            com = builtin mul dev_commission amount;
+            extra = builtin sub amount highest_binding_bid;
+            com = builtin mul dev_commission highest_binding_bid;
             com = builtin div com one_hundred128;
-            value = builtin sub amount com;
+            value = builtin sub highest_binding_bid com;
 
             delete funds_by_bidder[highest_bidder][id];
 
+            CallTransferDMZ highest_bidder extra;
             CallTransferDMZ owner value;
             CallTransferDMZ wallet com
           end
@@ -660,6 +665,7 @@ transition Withdraw(id: Uint256)
             (* user is highest bidder; transfer card ownership to winner *)
             (* remove the token_id mapping to allow new owner to place it for auction *)
             TransferNFT _sender token_id;
+
             delete token_auctions[token_id]
           | False =>
             (* user did not win bid; refund back locked up DMZ *)
