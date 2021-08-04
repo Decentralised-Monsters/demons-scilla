@@ -70,7 +70,7 @@ contract LVLUpContract
 
 ## Card Level Up Math model
 
-All cards begin at level `0`. See [nft-demons.scilla]("../ZRC1/nft-demons.scilla#L38"). To unlock / upgrade to the next level, users must pay a level up fee.
+All cards begin at level `0`. See [nft-demons.scilla]("../../ZRC1/nft-demons.scilla#L38"). To unlock / upgrade to the next level, users must pay a level up fee.
 
 The formula to calculate level up fee is:
 ```
