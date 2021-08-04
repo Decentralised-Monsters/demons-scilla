@@ -68,21 +68,33 @@ contract LVLUpContract
   field max_lvl: Uint32 = Uint32 5999
 ```
 
-## Math model
+## Card Level Up Math model
 
-For customise need change the `decimals` value.
+All cards begin at level `0`. See [nft-demons.scilla]("../ZRC1/nft-demons.scilla#L38"). To unlock / upgrade to the next level, users must pay a level up fee.
 
-for params:
-  * `amount` = 20000000000000000000
-  * `DECIMAL` = 200000000000000000
-  * `current_lvl` = 1000
-
-`lvl = amount / DECIMAL + current_lvl`
-
-```python
-amount = 20000000000000000000
-DECIMAL = 200000000000000000
-current_lvl = 1000
-
-lvl = amount // DECIMAL + current_lvl
+The formula to calculate level up fee is:
 ```
+fee = next_lvl * fee_multiplier * dmz_units
+
+fee_multiplier = 10
+dmz_units = 10^18
+```
+
+For instance, if a user is leveling a card from `0` -> `1`, the user must pay `(1 * 10 * 10^18)` = `10000000000000000000` which is the equivalent of 10 DMZ.
+
+Simply put, the levelup fee chart looks like this:
+| Level Up Fee |  Cost (DMZ) |
+| ------------ | ----------- |
+| 1            | 10          |
+| 2            | 20          |
+| 3            | 30          |
+| 4            | 40          |
+| x            | x*10        |
+
+We can manipulate the `decimals` and `fee_multiplier` field to change the model:
+```
+let decimals = Uint128 1000000000000000000
+field fee_multiplier: Uint32 = Uint32 10
+field max_lvl: Uint32 = Uint32 5999
+```
+
