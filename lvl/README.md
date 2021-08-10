@@ -94,7 +94,7 @@ Simply put, the levelup fee chart looks like this:
 We can manipulate the `decimals` and `fee_multiplier` field to change the model:
 ```
 let decimals = Uint128 1000000000000000000
-field fee_multiplier: Uint32 = Uint32 10
-field max_lvl: Uint32 = Uint32 5999
+field max_lvl: Uint32 = Uint32 5
+field fee_multiplier: Uint32 = Uint32 100
 ```
 

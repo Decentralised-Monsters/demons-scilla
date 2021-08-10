@@ -98,8 +98,8 @@ contract LVLUpContract
 )
 
 (* Mutable fields *)
-field max_lvl: Uint32 = Uint32 5999
-field fee_multiplier: Uint32 = Uint32 10
+field max_lvl: Uint32 = Uint32 5
+field fee_multiplier: Uint32 = Uint32 100
 
 (**************************************)
 (*             Procedures             *)
