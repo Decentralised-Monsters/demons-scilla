@@ -484,6 +484,18 @@ transition SetName(token_id: Uint256, new_name: String)
   event e
 end
 
+transition SetImageURI(token_id: Uint256, new_uri: String)
+  IsMinter _sender;
+  prev_uri <- token_uris[token_id];
+  token_uris[token_id] := new_uri;
+  e = {
+    _eventname: "ImageURIChangeSuccess";
+    prev_uri: prev_uri;
+    new_uri: new_uri
+  };
+  event e
+end
+
 transition ChangeLVL(token_id: Uint256, value: Uint32)
   IsMinter _sender;
   prev_lvl <- token_lvl[token_id];
