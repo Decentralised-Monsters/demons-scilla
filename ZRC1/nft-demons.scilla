@@ -484,8 +484,9 @@ transition SetName(token_id: Uint256, new_name: String)
   event e
 end
 
+(* @dev Modify the image URI; used only by contract owner *)
 transition SetImageURI(token_id: Uint256, new_uri: String)
-  IsMinter _sender;
+  IsContractOwner;
   prev_uri <- token_uris[token_id];
   token_uris[token_id] := new_uri;
   e = {
