@@ -76,20 +76,20 @@ The formula to calculate level up fee is:
 ```
 fee = next_lvl * fee_multiplier * dmz_units
 
-fee_multiplier = 10
+fee_multiplier = 100
 dmz_units = 10^18
 ```
 
-For instance, if a user is leveling a card from `0` -> `1`, the user must pay `(1 * 10 * 10^18)` = `10000000000000000000` which is the equivalent of 10 DMZ.
+For instance, if a user is leveling a card from `0` -> `1`, the user must pay `(1 * 100 * 10^18)` = `100000000000000000000` which is the equivalent of 100 DMZ.
 
 Simply put, the levelup fee chart looks like this:
 | Level Up Fee |  Cost (DMZ) |
 | ------------ | ----------- |
-| 1            | 10          |
-| 2            | 20          |
-| 3            | 30          |
-| 4            | 40          |
-| x            | x*10        |
+| 1            | 100         |
+| 2            | 200         |
+| 3            | 300         |
+| 4            | 400         |
+| x            | x*100       |
 
 We can manipulate the `decimals` and `fee_multiplier` field to change the model:
 ```
