@@ -35,7 +35,7 @@ let one = Uint256 1
 
 let zero32 = Uint32 0
 let one32 = Uint32 1
-let min_lvl = Uint32 1000
+let min_lvl = Uint32 0
 
 let dummy_str = ""
 let verdad = Dummy
@@ -43,6 +43,17 @@ let add_operation = Add
 let sub_operation = Sub
 
 (* Library functions *)
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_32 = @option_value Uint32
+
 let one_msg = 
   fun (msg : Message) => 
     let nil_msg = Nil {Message} in
@@ -473,13 +484,30 @@ transition SetName(token_id: Uint256, new_name: String)
   event e
 end
 
+(* @dev Modify the image URI; used only by contract owner *)
+transition SetImageURI(token_id: Uint256, new_uri: String)
+  IsContractOwner;
+  prev_uri <- token_uris[token_id];
+  token_uris[token_id] := new_uri;
+  e = {
+    _eventname: "ImageURIChangeSuccess";
+    prev_uri: prev_uri;
+    new_uri: new_uri
+  };
+  event e
+end
+
 transition ChangeLVL(token_id: Uint256, value: Uint32)
   IsMinter _sender;
+  prev_lvl <- token_lvl[token_id];
+  existing_lvl = option_32 zero32 prev_lvl;
   token_lvl[token_id] := value;
 
   e = {
     _eventname: "LevelUpgraded";
-    value: value
+    token_id: token_id;
+    prev_lvl: existing_lvl;
+    new_lvl: value
   };
   event e
 end
