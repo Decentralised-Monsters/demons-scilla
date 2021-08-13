@@ -250,7 +250,7 @@ procedure UpdateTokenCount(operation: Operation, address: ByStr20)
     new_to_count = 
       let current_count = get_bal some_to_count in
       builtin add current_count one;
-    owned_token_count[address] := new_to_count
+      owned_token_count[address] := new_to_count
   | Sub =>
     some_from_count <- owned_token_count[address];
     new_from_count = 
@@ -260,7 +260,14 @@ procedure UpdateTokenCount(operation: Operation, address: ByStr20)
           | True => zero
           | False => builtin sub current_count one
           end;
-    owned_token_count[address] := new_from_count
+    is_zero = builtin eq new_from_count zero;
+
+    match is_zero with
+    | True =>
+      delete owned_token_count[address]
+    | False =>
+      owned_token_count[address] := new_from_count
+    end
   end
 end
 
@@ -352,7 +359,7 @@ transition BatchMint(to: ByStr20, token_uris_list: List String)
   send msgs
 end
 
-(* @param:  token_id - Unique ID of the NFT to be destroyed                       *)
+(* @param:  token_id - Unique ID of the NFT to be destroyed *)
 transition Burn(token_id: Uint256)
   (* Check if token exists *)
   some_token_owner <- token_owners[token_id];

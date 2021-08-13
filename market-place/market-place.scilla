@@ -38,7 +38,7 @@ type Order =
 
 (* Error exceptions *)
 type Error =
-  | CodeMPnotApprovedToTransfer
+  | CodeMPNotApprovedToTransfer
   | CodeOrderWrongState
   | CodeOrderNotFound
   | CodePaymentAmountError
@@ -52,7 +52,7 @@ let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeMPnotApprovedToTransfer  => Int32 -1
+      | CodeMPNotApprovedToTransfer  => Int32 -1
       | CodeOrderWrongState          => Int32 -2
       | CodeOrderNotFound            => Int32 -3
       | CodePaymentAmountError       => Int32 -4
@@ -113,7 +113,7 @@ procedure CheckApproved(token_id: Uint256)
   match is_self with
   | True =>
   | False =>
-    err = CodeMPnotApprovedToTransfer;
+    err = CodeMPNotApprovedToTransfer;
     ThrowError err
   end
 end

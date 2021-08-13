@@ -21,6 +21,7 @@ type Error =
 | CodeNotEnded
 | CodeTokenAlreadyInAuction
 | CodeTokenListedInDirectSale
+| CodeAuctionNotApprovedToTransfer
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -63,21 +64,22 @@ let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotContractOwner         => Int32 -1
-      | CodeBlockGap                 => Int32 -2
-      | CodeNotStartedYet            => Int32 -3
-      | CodeAlreadyCanceled          => Int32 -4
-      | CodeTimeOut                  => Int32 -5
-      | CodeBipLessThanCurrent       => Int32 -6
-      | CodeNotFound                 => Int32 -7
-      | CodeIsOwner                  => Int32 -8
-      | CodeNotEndedOrCanceled       => Int32 -9
-      | CodeOnlyWithdrawn            => Int32 -10
-      | CodeNotTokenOwner            => Int32 -11
-      | CodeAuctionHasBid            => Int32 -12
-      | CodeNotEnded                 => Int32 -13
-      | CodeTokenAlreadyInAuction    => Int32 -14
-      | CodeTokenListedInDirectSale  => Int32 -15
+      | CodeNotContractOwner             => Int32 -1
+      | CodeBlockGap                     => Int32 -2
+      | CodeNotStartedYet                => Int32 -3
+      | CodeAlreadyCanceled              => Int32 -4
+      | CodeTimeOut                      => Int32 -5
+      | CodeBipLessThanCurrent           => Int32 -6
+      | CodeNotFound                     => Int32 -7
+      | CodeIsOwner                      => Int32 -8
+      | CodeNotEndedOrCanceled           => Int32 -9
+      | CodeOnlyWithdrawn                => Int32 -10
+      | CodeNotTokenOwner                => Int32 -11
+      | CodeAuctionHasBid                => Int32 -12
+      | CodeNotEnded                     => Int32 -13
+      | CodeTokenAlreadyInAuction        => Int32 -14
+      | CodeTokenListedInDirectSale      => Int32 -15
+      | CodeAuctionNotApprovedToTransfer => Int32 -16
       end
     in
     { _exception : "Error"; code : result_code }
@@ -138,7 +140,8 @@ contract AuctionFactory
   wallet: ByStr20,
   dmz: ByStr20,
   main: ByStr20 with contract
-    field token_owners: Map Uint256 ByStr20
+    field token_owners: Map Uint256 ByStr20,
+    field token_approvals: Map Uint256 ByStr20
   end,
   init_marketplace: ByStr20 with contract
     field token_orderbook: Map Uint256 Uint256 
@@ -270,6 +273,20 @@ procedure OnlyNotOwner(owner: ByStr20)
     err = CodeIsOwner;
     ThrowError err
   | False =>
+  end
+end
+
+(* demon must have been approved; token_approvals[token_id] = this_address *)
+procedure CheckApproved(token_id: Uint256)
+  some_address <-& main.token_approvals[token_id];
+  address = option_address zero_address some_address;
+  is_self = builtin eq _this_address address;
+
+  match is_self with
+  | True =>
+  | False =>
+    err = CodeAuctionNotApprovedToTransfer;
+    ThrowError err
   end
 end
 
@@ -419,6 +436,7 @@ end
 (* @param end_block: Block number at which the auction should end *)
 (* @param token_id: Token/Card put up for listing *)
 transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
+  CheckApproved token_id;
   CheckDirectListing token_id;
   CheckTokenOwner token_id;
 
