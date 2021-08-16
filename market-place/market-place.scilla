@@ -9,6 +9,7 @@ library MarketPlace
 
 let not_pause = Uint32 0
 let on_pause = Uint32 1
+let zero128 = Uint128 0
 let zero_address = 0x0000000000000000000000000000000000000000
 
 let one_msg = 
@@ -72,8 +73,8 @@ let make_error =
 contract MarketPlace
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  dmz: ByStr20,
+  init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_owners: Map Uint256 ByStr20,
     field token_approvals: Map Uint256 ByStr20
@@ -84,6 +85,8 @@ contract MarketPlace
 )
 
 
+field dmz: ByStr20 = init_dmz
+field wallet: ByStr20 = init_wallet
 field auction_listing: ByStr20 with contract
   field token_auctions: Map Uint256 Uint256
 end = init_auction
@@ -119,10 +122,11 @@ procedure CheckApproved(token_id: Uint256)
 end
 
 procedure CallTransferFromDMZ(amount: Uint128, from: ByStr20, to: ByStr20)
+  dmz_o <- dmz;
   call_transfer_from = {
     _tag: "TransferFrom";
-    _recipient: dmz;
-    _amount: Uint128 0;
+    _recipient: dmz_o;
+    _amount: zero128;
     from: from;
     to: to;
     amount: amount
@@ -135,7 +139,7 @@ procedure TransferToOwner(token_id: Uint256, owner: ByStr20)
   transfered = {
     _tag: "Transfer";
     _recipient: main;
-    _amount: Uint128 0;
+    _amount: zero128;
     to: owner;
     token_id: token_id
   };
@@ -147,7 +151,7 @@ procedure TransferToMarketPlace(token_id: Uint256)
   transfered = {
     _tag: "TransferFrom";
     _recipient: main;
-    _amount: Uint128 0;
+    _amount: zero128;
     to: _this_address;
     token_id: token_id
   };
@@ -260,8 +264,10 @@ transition Purchase(purchase_order_id: Uint256)
       fees = builtin div price current_marketplace_fee;
       sellers_amount = builtin sub price fees;
 
+      wallet_o <- wallet;
       CallTransferFromDMZ sellers_amount _sender owner;
-      CallTransferFromDMZ fees _sender wallet;
+      CallTransferFromDMZ fees _sender wallet_o;
+
       (* Delete the order from the orderbook*)
       delete orderbook[item_order_id];
       delete token_orderbook[token_id];
@@ -357,7 +363,23 @@ transition UpdateAuctionListing(new_auction: ByStr20 with contract field token_a
   event e
 end
 
-(*Empty callbacks*)
+(* @dev Updates the dmz contract address; used only by contract owner *)
+transition UpdateDMZ(new_dmz: ByStr20)
+  IsContractOwner;
+  dmz := new_dmz;
+  e = {_eventname: "UpdateDMZ"; new_dmz: new_dmz};
+  event e
+end
 
+(* @dev Updates the wallet contract address; used only by contract owner *)
+transition UpdateWallet(new_wallet: ByStr20)
+  IsContractOwner;
+  wallet := new_wallet;
+  e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
+  event e
+end
+
+(*Empty callbacks*)
+(* required for marketplace CallTransferFromDMZ *)
 transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end

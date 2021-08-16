@@ -137,8 +137,8 @@ let min =
 contract AuctionFactory
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  dmz: ByStr20,
+  init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_owners: Map Uint256 ByStr20,
     field token_approvals: Map Uint256 ByStr20
@@ -149,6 +149,9 @@ contract AuctionFactory
 )
 
 (* Mutable fields *)
+field dmz: ByStr20 = init_dmz
+field wallet: ByStr20 = init_wallet
+
 field direct_listing: ByStr20 with contract 
   field token_orderbook: Map Uint256 Uint256 
 end = init_marketplace
@@ -364,9 +367,10 @@ procedure CallTransferFromDMZ(amount: Uint128, from: ByStr20, to: ByStr20)
   match is_zero with
   | True =>
   | False =>
+    dmz_o <- dmz;
     call_transfer_from = {
       _tag: "TransferFrom";
-      _recipient: dmz;
+      _recipient: dmz_o;
       _amount: Uint128 0;
       from: from;
       to: to;
@@ -382,9 +386,10 @@ procedure CallTransferDMZ(to: ByStr20, amount: Uint128)
   match is_zero with
   | True =>
   | False =>
+    dmz_o <- dmz;
     msg_transfer = {
       _tag: "Transfer";
-      _recipient: dmz;
+      _recipient: dmz_o;
       _amount: zero128;
       to: to;
       amount: amount
@@ -672,9 +677,10 @@ transition Withdraw(id: Uint256)
 
             delete funds_by_bidder[highest_bidder][id];
 
+            wallet_o <- wallet;
             CallTransferDMZ highest_bidder extra;
             CallTransferDMZ owner value;
-            CallTransferDMZ wallet com
+            CallTransferDMZ wallet_o com
           end
         | False =>
           (* other bidders *)
@@ -716,6 +722,22 @@ transition UpdateDirectListing(new_marketplace: ByStr20 with contract field toke
   IsContractOwner;
   direct_listing := new_marketplace;
   e = {_eventname : "UpdateDirectListing"; new_direct_listing: new_marketplace};
+  event e
+end
+
+(* @dev Updates the dmz contract address; used only by contract owner *)
+transition UpdateDMZ(new_dmz: ByStr20)
+  IsContractOwner;
+  dmz := new_dmz;
+  e = {_eventname: "UpdateDMZ"; new_dmz: new_dmz};
+  event e
+end
+
+(* @dev Updates the wallet contract address; used only by contract owner *)
+transition UpdateWallet(new_wallet: ByStr20)
+  IsContractOwner;
+  wallet := new_wallet;
+  e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
   event e
 end
 

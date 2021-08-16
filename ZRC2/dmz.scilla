@@ -180,3 +180,8 @@ transition TransferFrom(from: ByStr20, to: ByStr20, amount: Uint128)
     ThrowError err
   end
 end
+
+(* empty callback *)
+(* required for marketplace CallTransferFromDMZ *)
+transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
