@@ -1,43 +1,47 @@
-# Start with the interface
+# Level Up
 
  * Upgrade - For upgrade to next level. (Before use should be aproved on ZRC2 contract. via `IncreaseAllowance`)
- * - amount (Uint128) - Amount of DMZ tokens.
+ * - fee (Uint128) - Upgrade fee in DMZ.
  * - token_id (Uint256) - token id which going to upgrade.
- * SetMaxLVL - Admin only method for change limit for lvl.
+ * SetMaxLVL - owner only method for change limit for lvl.
  * - value (Uint32) - the new value for `max_lvl`.
+ * SetFeeMultiplier - owner only method to set a new fee multiplier.
+ * - new_multiplier (uint32) - the new value for `fee_multiplier`.
 
-transitions user only:
+## Users Transitions
 ```Ocaml
 contract LVLUpContract
   Upgrade(amount: Uint128, token_id: Uint256)
 ```
 
-transitions admin only:
+## Owner Transitions
 ```Ocaml
 contract LVLUpContract
   SetMaxLVL(value: Uint32)
+  SetFeeMultiplier(new_multiplier: Uint32)
+  UpdateDMZ(new_dmz: ByStr20)
+  UpdateWallet(new_wallet: ByStr20)
 ```
 
-transitions callbacks:
+## Callbacks
 ```Ocaml
 contract LVLUpContract
-  transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+  TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
 ```
 
 ## Constructor
 
  * contract_owner - Admin of contract.
- * wallet - The wallet who will get rewards.
- * distributor - The claim contract.
- * dmz - The main ZRC2 token address.
+ * init_wallet - The wallet who will get rewards.
+ * init_dmz - The main ZRC2 token address.
  * main - The Main NFT token address.
 
 ```Ocaml
 contract LVLUpContract
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  dmz: ByStr20,
+  init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_lvl: Map Uint256 Uint32
   end
@@ -49,6 +53,7 @@ contract LVLUpContract
  * CodeNotOwner - If `_sender` is not equal `contract_owner`
  * CodeNotFound - If cannot find something.
  * CodeMaxLVL - lvl more than `max_lvl`
+ * CodeInsufficientFee - if user did not pay sufficient DMZ for the level up fee
 
 ```Ocaml
 contract DMZClaimLib
@@ -56,16 +61,21 @@ contract DMZClaimLib
     | CodeNotOwner => Int32 -1
     | CodeNotFound => Int32 -2
     | CodeMaxLVL   => Int32 -3
+    | CodeInsufficientFee => Int32 -4
 ```
 
-## Mutable fields
-
+## Mutable Fields
+ * dmz - Tracks the current dmz contract
+ * wallet - Tracks the current wallet to receive the commission
  * max_lvl - The max lvl for token.
+ * fee_multiplier - The constant multiplier used to compute the level up fee.
 
 ```Ocaml
 contract LVLUpContract
-
-  field max_lvl: Uint32 = Uint32 5999
+  field dmz: ByStr20 = init_dmz
+  field wallet: ByStr20 = init_wallet
+  field max_lvl: Uint32 = Uint32 5
+  field fee_multiplier: Uint32 = Uint32 100
 ```
 
 ## Card Level Up Math model
