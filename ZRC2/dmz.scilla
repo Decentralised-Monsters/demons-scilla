@@ -182,6 +182,10 @@ transition TransferFrom(from: ByStr20, to: ByStr20, amount: Uint128)
 end
 
 (* empty callback *)
+(* required for auction Withdraw - CallTransferDMZ *)
+transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+
 (* required for marketplace CallTransferFromDMZ *)
 transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
