@@ -133,7 +133,7 @@ bid_increment = 10
  * CodeIsOwner - If invoker is `token_id` owner.
  * CodeNotEndedOrCanceled - If auction in progress.
  * CodeOnlyWithdrawn - For only withdrawn amount and tokens.
- * CodeNotTokenOwner - If invoker is `token_id` owner.
+ * CodeNotTokenOwner - If invoker is not `token_id` owner.
  * CodeAuctionHasBid - If auction has existing bid.
  * CodeNotEnded - If auction has not yet ended.
  * CodeTokenAlreadyInAuction - If `token_id` already exists.
@@ -162,7 +162,7 @@ contract AuctionFactoryLib
 ```
 
 
-## Mutable fields
+## Mutable Fields
  * dmz - Tracks the current dmz contract
  * wallet - Tracks the current wallet to receive the commission
  * direct_listing - Tracks the current marketplace contract
