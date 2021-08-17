@@ -21,6 +21,7 @@ type Error =
 | CodeNotEnded
 | CodeTokenAlreadyInAuction
 | CodeTokenListedInDirectSale
+| CodeAuctionNotApprovedToTransfer
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -63,21 +64,22 @@ let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotContractOwner         => Int32 -1
-      | CodeBlockGap                 => Int32 -2
-      | CodeNotStartedYet            => Int32 -3
-      | CodeAlreadyCanceled          => Int32 -4
-      | CodeTimeOut                  => Int32 -5
-      | CodeBipLessThanCurrent       => Int32 -6
-      | CodeNotFound                 => Int32 -7
-      | CodeIsOwner                  => Int32 -8
-      | CodeNotEndedOrCanceled       => Int32 -9
-      | CodeOnlyWithdrawn            => Int32 -10
-      | CodeNotTokenOwner            => Int32 -11
-      | CodeAuctionHasBid            => Int32 -12
-      | CodeNotEnded                 => Int32 -13
-      | CodeTokenAlreadyInAuction    => Int32 -14
-      | CodeTokenListedInDirectSale  => Int32 -15
+      | CodeNotContractOwner             => Int32 -1
+      | CodeBlockGap                     => Int32 -2
+      | CodeNotStartedYet                => Int32 -3
+      | CodeAlreadyCanceled              => Int32 -4
+      | CodeTimeOut                      => Int32 -5
+      | CodeBipLessThanCurrent           => Int32 -6
+      | CodeNotFound                     => Int32 -7
+      | CodeIsOwner                      => Int32 -8
+      | CodeNotEndedOrCanceled           => Int32 -9
+      | CodeOnlyWithdrawn                => Int32 -10
+      | CodeNotTokenOwner                => Int32 -11
+      | CodeAuctionHasBid                => Int32 -12
+      | CodeNotEnded                     => Int32 -13
+      | CodeTokenAlreadyInAuction        => Int32 -14
+      | CodeTokenListedInDirectSale      => Int32 -15
+      | CodeAuctionNotApprovedToTransfer => Int32 -16
       end
     in
     { _exception : "Error"; code : result_code }
@@ -135,10 +137,11 @@ let min =
 contract AuctionFactory
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  dmz: ByStr20,
+  init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
-    field token_owners: Map Uint256 ByStr20
+    field token_owners: Map Uint256 ByStr20,
+    field token_approvals: Map Uint256 ByStr20
   end,
   init_marketplace: ByStr20 with contract
     field token_orderbook: Map Uint256 Uint256 
@@ -146,6 +149,9 @@ contract AuctionFactory
 )
 
 (* Mutable fields *)
+field dmz: ByStr20 = init_dmz
+field wallet: ByStr20 = init_wallet
+
 field direct_listing: ByStr20 with contract 
   field token_orderbook: Map Uint256 Uint256 
 end = init_marketplace
@@ -273,6 +279,20 @@ procedure OnlyNotOwner(owner: ByStr20)
   end
 end
 
+(* demon must have been approved; token_approvals[token_id] = this_address *)
+procedure CheckApproved(token_id: Uint256)
+  some_address <-& main.token_approvals[token_id];
+  address = option_address zero_address some_address;
+  is_self = builtin eq _this_address address;
+
+  match is_self with
+  | True =>
+  | False =>
+    err = CodeAuctionNotApprovedToTransfer;
+    ThrowError err
+  end
+end
+
 procedure CheckBipAmount(bid: Uint128, highest_binding_bid: Uint128)
   is_gt_current_highest = builtin lt highest_binding_bid bid;
 
@@ -325,6 +345,37 @@ procedure CheckTokenOwner(token_id: Uint256)
   end
 end
 
+(* check if the auction entry can be removed from the map *)
+(* auction can be removed if owner and other users have withdrawn  *)
+procedure DeleteAuction(id: Uint256)
+  some_auction <- auctions[id];
+  match some_auction with
+  | Some auction =>
+    match auction with
+    | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
+      (* check bid count *)
+      (* if everyone has withdrawn, it should be zero *)
+      some_bid_count <- bid_count[id];
+
+      match some_bid_count with
+      | Some current_count =>
+        (* some users have not withdrawn *)
+      | None =>
+        (* no such id; all users withdrawn *)
+        match owner_has_withdrawn with
+        | True =>
+          (* clear to delete this entry *)
+          delete auctions[id]
+        | False =>
+          (* wait for owner to withdraw *)
+        end
+      end
+    end
+  | None =>
+    (* possible for entry to be deleted; do nothing *)
+  end
+end
+
 
 procedure UpdateCounter(id: Uint256, op: Operation)
   some_bid_count <- bid_count[id];
@@ -347,9 +398,10 @@ procedure CallTransferFromDMZ(amount: Uint128, from: ByStr20, to: ByStr20)
   match is_zero with
   | True =>
   | False =>
+    dmz_o <- dmz;
     call_transfer_from = {
       _tag: "TransferFrom";
-      _recipient: dmz;
+      _recipient: dmz_o;
       _amount: Uint128 0;
       from: from;
       to: to;
@@ -365,9 +417,10 @@ procedure CallTransferDMZ(to: ByStr20, amount: Uint128)
   match is_zero with
   | True =>
   | False =>
+    dmz_o <- dmz;
     msg_transfer = {
       _tag: "Transfer";
-      _recipient: dmz;
+      _recipient: dmz_o;
       _amount: zero128;
       to: to;
       amount: amount
@@ -412,13 +465,15 @@ procedure TransferNFT(to: ByStr20, token_id: Uint256)
   send msgs
 end
 
-(* @dev Put up a card for auction listing *)
+(* @dev Put up a card for auction listing. *)
+(* User must invoke demon contract - SetApprove(auction_contract, token_id) prior to this *)
 (* @param bid_increment: Min increment for each bid *)
 (* @param min_price: Starting bid price *)
 (* @param start_block: Block number at which the auction should begin *)
 (* @param end_block: Block number at which the auction should end *)
 (* @param token_id: Token/Card put up for listing *)
 transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
+  CheckApproved token_id;
   CheckDirectListing token_id;
   CheckTokenOwner token_id;
 
@@ -461,6 +516,7 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
 end
 
 (* @dev Bid on an auction listing. DMZ are locked up until Withdraw() is invoked *)
+(* User must invoke dmz contract's IncreaseAllowance(auction_contract, amount) prior to this *)
 (* @param id: Auction id *)
 (* @param amount: Bid amount (DMZ amount); if _sender is the first time bidding on this card, the bid amount is the ENTIRE amount *)
 (* If _sender has bidded before, then _sender has intention to raise his/her previous bid *)
@@ -608,6 +664,7 @@ end
 
 
 (* @dev Allows owner and bidders to claim their bids after auction has ended *)
+(* User must invoke dmz contract's IncreaseAllowance(auction_contract, amount) prior to this *)
 (* The owner would receive the winning bid amount minus the commission *)
 (* The one who wins the bid would receive their card. *)
 (* The rest would receive back their bids *)
@@ -640,11 +697,11 @@ transition Withdraw(id: Uint256)
           | False =>
             (* owner claiming the winning bid *)
             some_bid_amount <- funds_by_bidder[highest_bidder][id];
-            (* the auction's owner should be allowed to withdraw the highestBindingBid *)
+
             new_owner_has_withdrawn = True;
             new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
             auctions[id] := new_auction;
-
+            
             (* winner to pay only highest binding bid, remainder to be refunded *)
             amount = option_uint128 zero128 some_bid_amount;
             extra = builtin sub amount highest_binding_bid;
@@ -654,9 +711,11 @@ transition Withdraw(id: Uint256)
 
             delete funds_by_bidder[highest_bidder][id];
 
+            wallet_o <- wallet;
             CallTransferDMZ highest_bidder extra;
             CallTransferDMZ owner value;
-            CallTransferDMZ wallet com
+            CallTransferDMZ wallet_o com;
+            DeleteAuction id
           end
         | False =>
           (* other bidders *)
@@ -665,12 +724,13 @@ transition Withdraw(id: Uint256)
             (* user is highest bidder; transfer card ownership to winner *)
             (* remove the token_id mapping to allow new owner to place it for auction *)
             TransferNFT _sender token_id;
-
+            DeleteAuction id;
             delete token_auctions[token_id]
           | False =>
             (* user did not win bid; refund back locked up DMZ *)
-            delete funds_by_bidder[_sender][id];
-            ReturnFunds id _sender
+            ReturnFunds id _sender;
+            DeleteAuction id;
+            delete funds_by_bidder[_sender][id]
           end
         end
       end
@@ -698,6 +758,22 @@ transition UpdateDirectListing(new_marketplace: ByStr20 with contract field toke
   IsContractOwner;
   direct_listing := new_marketplace;
   e = {_eventname : "UpdateDirectListing"; new_direct_listing: new_marketplace};
+  event e
+end
+
+(* @dev Updates the dmz contract address; used only by contract owner *)
+transition UpdateDMZ(new_dmz: ByStr20)
+  IsContractOwner;
+  dmz := new_dmz;
+  e = {_eventname: "UpdateDMZ"; new_dmz: new_dmz};
+  event e
+end
+
+(* @dev Updates the wallet contract address; used only by contract owner *)
+transition UpdateWallet(new_wallet: ByStr20)
+  IsContractOwner;
+  wallet := new_wallet;
+  e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
   event e
 end
 

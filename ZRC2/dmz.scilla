@@ -20,7 +20,6 @@ type Error =
 | CodeInsufficientFunds
 | CodeInsufficientAllowance
 | CodeNotOwner
-| CodeNotMinter
 
 let make_error =
   fun (result : Error) =>
@@ -30,7 +29,6 @@ let make_error =
       | CodeInsufficientFunds     => Int32 -2
       | CodeInsufficientAllowance => Int32 -3
       | CodeNotOwner              => Int32 -4
-      | CodeNotMinter             => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
@@ -68,7 +66,6 @@ field balances: Map ByStr20 Uint128
 field allowances: Map ByStr20 (Map ByStr20 Uint128) 
   = Emp ByStr20 (Map ByStr20 Uint128)
   
-field minter: ByStr20 = contract_owner
 
 (**************************************)
 (*             Procedures             *)
@@ -89,17 +86,6 @@ procedure IsOwner()
   end
 end
 
-procedure IsMinter(address: ByStr20)
-  current_minter <- minter;
-  is_minter = builtin eq current_minter address;
-  match is_minter with
-  | True =>
-  | False =>
-    err = CodeNotMinter;
-    ThrowError err
-  end
-end
-
 procedure IsNotSender(address: ByStr20)
   is_sender = builtin eq _sender address;
   match is_sender with
@@ -107,26 +93,6 @@ procedure IsNotSender(address: ByStr20)
     err = CodeIsSender;
     ThrowError err
   | False =>
-  end
-end
-
-procedure AuthorizedBurnIfSufficientBalance(from: ByStr20, amount: Uint128)
-  o_get_bal <- balances[from];
-  bal = get_val o_get_bal;
-  can_burn = uint128_le amount bal;
-  match can_burn with
-  | True =>
-    (* Subtract amount from from *)
-    new_balance = builtin sub bal amount;
-    balances[from] := new_balance;
-    current_total_supply <- total_supply;
-    new_total_supply = builtin sub current_total_supply amount;
-    total_supply := new_total_supply;
-    e = {_eventname: "Burnt"; burner: _sender; burn_account: from; amount: amount};
-    event e  
-  | False =>
-    err = CodeInsufficientFunds;
-    ThrowError err
   end
 end
 
@@ -213,4 +179,13 @@ transition TransferFrom(from: ByStr20, to: ByStr20, amount: Uint128)
     err = CodeInsufficientAllowance;
     ThrowError err
   end
+end
+
+(* empty callback *)
+(* required for auction Withdraw - CallTransferDMZ *)
+transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+
+(* required for marketplace CallTransferFromDMZ *)
+transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
