@@ -191,3 +191,8 @@ contract AuctionFactory
   field total: Uint256 = zero256
   field commission: Uint128 = Uint128 10
 ```
+
+## Dummy Auction Contract
+To be explained in-depth.
+Basically required for initial deployment because neither the auction contract nor marketplace contract is up.
+See the main readme, deploy section for more info.

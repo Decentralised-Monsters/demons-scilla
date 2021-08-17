@@ -118,3 +118,8 @@ contract MarketPlace
   field token_orderbook : Map Uint256 Uint256 = Emp Uint256 Uint256     
   field marketplace_fee: Uint128 = Uint128 20 
 ```
+
+## Dummy Marketplace Contract
+To be explained in-depth.
+Basically required for initial deployment because neither the auction contract nor marketplace contract is up.
+See the main readme, deploy section for more info.
