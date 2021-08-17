@@ -345,6 +345,37 @@ procedure CheckTokenOwner(token_id: Uint256)
   end
 end
 
+(* check if the auction entry can be removed from the map *)
+(* auction can be removed if owner and other users have withdrawn  *)
+procedure DeleteAuction(id: Uint256)
+  some_auction <- auctions[id];
+  match some_auction with
+  | Some auction =>
+    match auction with
+    | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
+      (* check bid count *)
+      (* if everyone has withdrawn, it should be zero *)
+      some_bid_count <- bid_count[id];
+
+      match some_bid_count with
+      | Some current_count =>
+        (* some users have not withdrawn *)
+      | None =>
+        (* no such id; all users withdrawn *)
+        match owner_has_withdrawn with
+        | True =>
+          (* clear to delete this entry *)
+          delete auctions[id]
+        | False =>
+          (* wait for owner to withdraw *)
+        end
+      end
+    end
+  | None =>
+    (* possible for entry to be deleted; do nothing *)
+  end
+end
+
 
 procedure UpdateCounter(id: Uint256, op: Operation)
   some_bid_count <- bid_count[id];
@@ -663,11 +694,11 @@ transition Withdraw(id: Uint256)
           | False =>
             (* owner claiming the winning bid *)
             some_bid_amount <- funds_by_bidder[highest_bidder][id];
-            (* the auction's owner should be allowed to withdraw the highestBindingBid *)
+
             new_owner_has_withdrawn = True;
             new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
             auctions[id] := new_auction;
-
+            
             (* winner to pay only highest binding bid, remainder to be refunded *)
             amount = option_uint128 zero128 some_bid_amount;
             extra = builtin sub amount highest_binding_bid;
@@ -680,7 +711,8 @@ transition Withdraw(id: Uint256)
             wallet_o <- wallet;
             CallTransferDMZ highest_bidder extra;
             CallTransferDMZ owner value;
-            CallTransferDMZ wallet_o com
+            CallTransferDMZ wallet_o com;
+            DeleteAuction id
           end
         | False =>
           (* other bidders *)
@@ -689,12 +721,13 @@ transition Withdraw(id: Uint256)
             (* user is highest bidder; transfer card ownership to winner *)
             (* remove the token_id mapping to allow new owner to place it for auction *)
             TransferNFT _sender token_id;
-
+            DeleteAuction id;
             delete token_auctions[token_id]
           | False =>
             (* user did not win bid; refund back locked up DMZ *)
-            delete funds_by_bidder[_sender][id];
-            ReturnFunds id _sender
+            ReturnFunds id _sender;
+            DeleteAuction id;
+            delete funds_by_bidder[_sender][id]
           end
         end
       end
