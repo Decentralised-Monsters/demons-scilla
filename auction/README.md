@@ -1,26 +1,29 @@
-# Start with the interface
+# Auction
 
 Our auction contract will have a simple interface that allows users to place bids and, after the auction is complete, withdraw their funds. The owner of the auction needs to be able to cancel the auction in exceptional cases, and must also be allowed to withdraw the winning bid.
 
-I’ve settled on the following interface, which should provide just enough expressiveness to handle this functionality. Notice that this is also a good time to think about the events that we might want these functions to emit.
-
- * CreateAuction - A transition for create an auction.
+ * **CreateAuction** - A transition for create an auction.
  * - bid_increment (Uint128) - The incrementer price for bid.
  * - start_block (BNum) - the block number which auction shell start. (cannot be less or equal current_block)
  * - end_block (BNum) - The block number which auction shell end. (cannot be less or equal start_block)
  * - token_id (Uint256) - The approved `token_id` for place on auction.
- * PlaceBid - A transition for create a bid.
+ * **PlaceBid** - A transition for create a bid.
  * - id (Uint256) - The id of auction.
- * - _amount (Uint128) - value of ZILs.
- * CancelAuction - A transition for cancel auction (auction creater only.)
+ * - _amount (Uint128) - value of DMZ.
+ * **CancelAuction** - A transition for cancel auction (auction creator only.)
  * - id (Uint256) - The id of auction.
- * Withdraw - A transition for withdraw funds or token if sender is leader of auction.
+ * **Withdraw** - A transition for withdraw funds or token if sender is leader of auction.
  * - id (Uint256) - The id of auction.
- * RemoveAuctionList - An admin transition for remove old auctions.
- * - id_list (List Uint256) - A list of id auctions.
- * SetCommission - An admin transition for change dev commission.
+ * **SetCommission** - A owner transition for change dev commission.
+ * - value (Uint128) - The new dev commission percentage
+ * **UpdateDirectListing** - A owner transition to update the marketplace contract address.
+ * - new_marketplace (ByStr20 with contract field token_orderbook: Map Uint256 Uint256 end) - The new marketplace contract address.
+ * **UpdateDMZ** - A owner transition to update the dmz contract address.
+ * - new_dmz (ByStr20) - The new dmz contract address.
+ * **UpdateWallet** - A owner transition to update the wallet address.
+ * - new_wallet (ByStr20) - The new wallet address.
 
-transitions user only:
+Users Transitions:
 ```Ocaml
 contract AuctionFactory
   CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
@@ -29,16 +32,19 @@ contract AuctionFactory
   Withdraw(id: Uint256)
 ```
 
-transitions admin only:
+Owner Transitions:
 ```Ocaml
 contract AuctionFactory
-  RemoveAuctionList(id_list: List Uint256)
   SetCommission(value: Uint128)
+  UpdateDirectListing(new_marketplace: ByStr20 with contract field token_orderbook: Map Uint256 Uint256 end)
+  UpdateDMZ(new_dmz: ByStr20)
+  UpdateWallet(new_wallet: ByStr20)
 ```
 
-transitions callbacks:
+Callbacks:
 ```Ocaml
 contract AuctionFactory
+  RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
   RecipientAcceptTransferFrom(from: ByStr20, recipient: ByStr20, token_id: Uint256)
   TransferFromSuccessCallBack(from: ByStr20, recipient: ByStr20, token_id: Uint256)
   TransferSuccessCallBack(from: ByStr20, recipient: ByStr20, token_id: Uint256)
@@ -47,18 +53,23 @@ contract AuctionFactory
 ## Constructor
 
  * contract_owner - Admin of contract.
- * wallet - A wallet for store commission rewards.
+ * init_wallet - A wallet for store commission rewards.
+ * init_dmz - The Main of ZRC2 contract.
  * main - The Main NFT token address.
- * dmz - The Main of ZRC2 contract.
+ * init_marketplace - The marketplace contract.
+
 
 ```Ocaml
 contract AuctionFactory
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  dmz: ByStr20,
+  init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_owners: Map Uint256 ByStr20
+  end,
+  init_marketplace: ByStr20 with contract
+    field token_orderbook: Map Uint256 Uint256 
   end
 )
 ```
@@ -112,32 +123,50 @@ What about `bid_increment` and `highest_binding_bid`? It’s worth taking a mome
 ```Ocaml
 contract AuctionFactoryLib
   type Error =
-    | CodeNotContractOwner   => Int32 -1
-    | CodeBlockGap           => Int32 -2
-    | CodeNotStartedYet      => Int32 -3
-    | CodeAlreadyCanceled    => Int32 -4
-    | CodeTimeOut            => Int32 -5
-    | CodeBipLessThanCurrent => Int32 -6
-    | CodeNotFound           => Int32 -7
-    | CodeIsOwner            => Int32 -8
-    | CodeNotEndedOrCanceled => Int32 -9
-    | CodeOnlyWithdrawn      => Int32 -10
+    | CodeNotContractOwner             => Int32 -1
+    | CodeBlockGap                     => Int32 -2
+    | CodeNotStartedYet                => Int32 -3
+    | CodeAlreadyCanceled              => Int32 -4
+    | CodeTimeOut                      => Int32 -5
+    | CodeBipLessThanCurrent           => Int32 -6
+    | CodeNotFound                     => Int32 -7
+    | CodeIsOwner                      => Int32 -8
+    | CodeNotEndedOrCanceled           => Int32 -9
+    | CodeOnlyWithdrawn                => Int32 -10
+    | CodeNotTokenOwner                => Int32 -11
+    | CodeAuctionHasBid                => Int32 -12
+    | CodeNotEnded                     => Int32 -13
+    | CodeTokenAlreadyInAuction        => Int32 -14
+    | CodeTokenListedInDirectSale      => Int32 -15
+    | CodeAuctionNotApprovedToTransfer => Int32 -16
 ```
 
 
 ## Mutable fields
-
+ * dmz - Tracks the current dmz contract
+ * wallet - Tracks the current wallet to receive the commission
+ * direct_listing - Tracks the current marketplace contract
  * funds_by_bidder - Storage for auction participants `_sender` -> `auction_id` -> `_amount`.
  * auctions - Storage for auction: `auction_id` -> `Auction`
+ * bid_count - Count the number of bids per auction listing
+ * token_auctions - Mapping of `token_id` -> `auction_id`, required for other contracts to check if `token_id` already exists in auction.
  * total - A counter for generate `auction_id`.
  * commission - Value of dev commission by default 10%.
 
 ```Ocaml
 contract AuctionFactory
+field dmz: ByStr20 = init_dmz
+field wallet: ByStr20 = init_wallet
+
+field direct_listing: ByStr20 with contract 
+  field token_orderbook: Map Uint256 Uint256 
+end = init_marketplace
 
 field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128) 
   = Emp ByStr20 (Map Uint256 Uint128)
-
+  
+field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
+field token_auctions: Map Uint256 Uint256 = Emp Uint256 Uint256
 field auctions: Map Uint256 Auction = Emp Uint256 Auction
 field total: Uint256 = zero256
 field commission: Uint128 = Uint128 10

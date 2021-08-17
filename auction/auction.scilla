@@ -465,7 +465,8 @@ procedure TransferNFT(to: ByStr20, token_id: Uint256)
   send msgs
 end
 
-(* @dev Put up a card for auction listing *)
+(* @dev Put up a card for auction listing. *)
+(* User must invoke demon contract - SetApprove(auction_contract, token_id) prior to this *)
 (* @param bid_increment: Min increment for each bid *)
 (* @param min_price: Starting bid price *)
 (* @param start_block: Block number at which the auction should begin *)
@@ -515,6 +516,7 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
 end
 
 (* @dev Bid on an auction listing. DMZ are locked up until Withdraw() is invoked *)
+(* User must invoke dmz contract's IncreaseAllowance(auction_contract, amount) prior to this *)
 (* @param id: Auction id *)
 (* @param amount: Bid amount (DMZ amount); if _sender is the first time bidding on this card, the bid amount is the ENTIRE amount *)
 (* If _sender has bidded before, then _sender has intention to raise his/her previous bid *)
@@ -662,6 +664,7 @@ end
 
 
 (* @dev Allows owner and bidders to claim their bids after auction has ended *)
+(* User must invoke dmz contract's IncreaseAllowance(auction_contract, amount) prior to this *)
 (* The owner would receive the winning bid amount minus the commission *)
 (* The one who wins the bid would receive their card. *)
 (* The rest would receive back their bids *)
