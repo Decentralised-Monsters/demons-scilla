@@ -23,7 +23,7 @@ Our auction contract will have a simple interface that allows users to place bid
  * **UpdateWallet** - A owner transition to update the wallet address.
  * - new_wallet (ByStr20) - The new wallet address.
 
-Users Transitions:
+## Users Transitions
 ```Ocaml
 contract AuctionFactory
   CreateAuction(bid_increment: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
@@ -32,7 +32,7 @@ contract AuctionFactory
   Withdraw(id: Uint256)
 ```
 
-Owner Transitions:
+## Owner Transitions
 ```Ocaml
 contract AuctionFactory
   SetCommission(value: Uint128)
@@ -41,7 +41,7 @@ contract AuctionFactory
   UpdateWallet(new_wallet: ByStr20)
 ```
 
-Callbacks:
+## Callbacks
 ```Ocaml
 contract AuctionFactory
   RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
@@ -100,12 +100,25 @@ contract AuctionFactoryLib
     | Auction of Bool Uint128 ByStr20 Bool StaticAuction
 ```
 
+## Bid Mechanism
 Some of these are self-explanatory, like canceled and `funds_by_bidder`. We’ll see how these are used when we start writing our contract’s functions. What about the rest?
 Every auction needs an owner — the person to whom the winning bid will go if the auction completes successfully. If you were so inclined, you might want to separate out the “controller” (say, the person or contract that has permission to cancel the auction) from the “beneficiary” (the person or contract to whom the funds will go after the auction is over), but I’ll leave that as an exercise to the reader. For now, they’re one and the same.
 Auctions also require a start and end time. Time in Scilla is a bit tricky — block timestamps are set by miners, and are not necessarily safe from spoofing. An emerging best practice is to demarcate time based on block number. We know with a fair amount of certainty that ZIlliqa blocks are generated roughly every 39 seconds; consequently we can infer timestamps from these numbers rather than the spoofable timestamp fields. Hence, `start_block` and `end_block`. If we build our UI correctly, this abstraction should be invisible to the user.
 
 What about `bid_increment` and `highest_binding_bid`? It’s worth taking a moment to explain these. On many popular auction platforms, users are incentivized to bid the maximum they’re willing to pay by not binding them to that full amount, but rather to the previous highest bid plus the increment. That’s a mouthful, so let me give an example. Let’s say the current highest bid is $430, and the `bid_increment` is $10. You decide to bid $500. However, you are only obligated to pay $440 (the current highest bid + bid_increment) if you win the auction. In this case, $440 is the `highest_binding_bid`. If someone comes along and bids $450, you will still be the highestBidder, but the `highest_binding_bid` will be raised to $460. It’s sort of like asking the platform to automatically bid for you up to a given amount, after which point you’ll need to make a decision to raise your maximum bid or bow out. Just to be clear, anything you send in excess of `highest_binding_bid` will be refunded to you when you win the auction.
 
+### Bid Mechanism (TLDR Version)
+```
+starting_price = 200
+bid_increment = 10
+
+1. User A bids 300      (highest_binding_bid = 300, highest_bid = 300)
+2. User B bids 350      (highest_binding_bid = 310, highest_bid = 350)   <-- highest_binding_bid is 310 because the logic will increment the prev_highest_bid + increment (300 + 10) and then take min(310, 350)
+3. User A raise to 400. (highest_binding_bid = 360, highest_bid = 400) <-- same logic as above min(360, 400)
+3. Auction timed out. A wins.
+4. A claims the card.  (360 is deducted from A)   <-- remaning 40 is transferred back to User A. A portion of the 360 will be the commission and transferred to the commission wallet. The remaning portion is sent to the auction creator.
+5. B claims back funds (gets back his 350)
+```
 
 ## Errors
 
@@ -117,8 +130,15 @@ What about `bid_increment` and `highest_binding_bid`? It’s worth taking a mome
  * CodeIsOwner - If `_sender` is not owner of auction.
  * CodeBipLessThanCurrent - if `_amount` < `highest_binding_bid`
  * CodeNotFound - If id of auction doesn't found.
+ * CodeIsOwner - If invoker is `token_id` owner.
  * CodeNotEndedOrCanceled - If auction in progress.
  * CodeOnlyWithdrawn - For only withdrawn amount and tokens.
+ * CodeNotTokenOwner - If invoker is `token_id` owner.
+ * CodeAuctionHasBid - If auction has existing bid.
+ * CodeNotEnded - If auction has not yet ended.
+ * CodeTokenAlreadyInAuction - If `token_id` already exists.
+ * CodeTokenListedInDirectSale - If `token_id` already exists in marketplace contract.
+ * CodeAuctionNotApprovedToTransfer - If `token_id` not yet approved on demon contract for auction to transfer owner demon to auction.
 
 ```Ocaml
 contract AuctionFactoryLib
@@ -155,19 +175,19 @@ contract AuctionFactoryLib
 
 ```Ocaml
 contract AuctionFactory
-field dmz: ByStr20 = init_dmz
-field wallet: ByStr20 = init_wallet
+  field dmz: ByStr20 = init_dmz
+  field wallet: ByStr20 = init_wallet
 
-field direct_listing: ByStr20 with contract 
-  field token_orderbook: Map Uint256 Uint256 
-end = init_marketplace
+  field direct_listing: ByStr20 with contract 
+    field token_orderbook: Map Uint256 Uint256 
+  end = init_marketplace
 
-field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128) 
-  = Emp ByStr20 (Map Uint256 Uint128)
-  
-field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
-field token_auctions: Map Uint256 Uint256 = Emp Uint256 Uint256
-field auctions: Map Uint256 Auction = Emp Uint256 Auction
-field total: Uint256 = zero256
-field commission: Uint128 = Uint128 10
+  field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128) 
+    = Emp ByStr20 (Map Uint256 Uint128)
+
+  field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
+  field token_auctions: Map Uint256 Uint256 = Emp Uint256 Uint256
+  field auctions: Map Uint256 Auction = Emp Uint256 Auction
+  field total: Uint256 = zero256
+  field commission: Uint128 = Uint128 10
 ```
