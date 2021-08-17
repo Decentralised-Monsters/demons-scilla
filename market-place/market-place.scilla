@@ -40,9 +40,7 @@ type Order =
 (* Error exceptions *)
 type Error =
   | CodeMPNotApprovedToTransfer
-  | CodeOrderWrongState
   | CodeOrderNotFound
-  | CodePaymentAmountError
   | CodeNotAuthorized
   | CodeNotTokenOwner
   | CodePauseNotPause
@@ -54,14 +52,12 @@ let make_error =
     let result_code = 
       match result with
       | CodeMPNotApprovedToTransfer  => Int32 -1
-      | CodeOrderWrongState          => Int32 -2
-      | CodeOrderNotFound            => Int32 -3
-      | CodePaymentAmountError       => Int32 -4
-      | CodeNotAuthorized            => Int32 -5
-      | CodeNotTokenOwner            => Int32 -6
-      | CodePauseNotPause            => Int32 -7
-      | CodeTokenListedInAuction     => Int32 -8
-      | CodeTokenAlreadyListed       => Int32 -9
+      | CodeOrderNotFound            => Int32 -2
+      | CodeNotAuthorized            => Int32 -3
+      | CodeNotTokenOwner            => Int32 -4
+      | CodePauseNotPause            => Int32 -5
+      | CodeTokenListedInAuction     => Int32 -6
+      | CodeTokenAlreadyListed       => Int32 -7
       end
     in
     { _exception : "Error"; code : result_code }
