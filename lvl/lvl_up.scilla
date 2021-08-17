@@ -25,17 +25,6 @@ let option_value =
 let option_128 = @option_value Uint128
 let option_32 = @option_value Uint32
 
-(* amount // DECIMAL + current_lvl *)
-(* let lvl_up =
-  fun (amount: Uint128) => 
-  fun (current_lvl: Uint32) =>
-    let some_lvl = builtin to_uint128 current_lvl in
-    let lvl = option_128 one128 some_lvl in
-    let value = builtin div amount decimals in
-    let next_lvl = builtin add value lvl in
-    let some_next_lvl = builtin to_uint32 next_lvl in
-      option_32 current_lvl some_next_lvl *)
-
 (* compute the fee requried for level up against the fee paid by user *)
 let compute_fee =
   fun (new_lvl: Uint32) =>
@@ -90,14 +79,16 @@ let make_error =
 contract LVLUpContract
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  dmz: ByStr20,
+  init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_lvl: Map Uint256 Uint32
   end
 )
 
 (* Mutable fields *)
+field dmz: ByStr20 = init_dmz
+field wallet: ByStr20 = init_wallet
 field max_lvl: Uint32 = Uint32 5
 field fee_multiplier: Uint32 = Uint32 100
 
@@ -133,9 +124,10 @@ procedure CallUpgrade(new_lvl: Uint32, token_id: Uint256)
 end
 
 procedure CallTransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
+  dmz_o <- dmz;
   call_transfer_from = {
     _tag: "TransferFrom";
-    _recipient: dmz;
+    _recipient: dmz_o;
     _amount: Uint128 0;
     from: from;
     to: to;
@@ -177,10 +169,11 @@ transition Upgrade(fee: Uint128, token_id: Uint256)
     | False =>
       new_lvl = increment_lvl current_lvl max;
       
+      wallet_o <- wallet;
       current_multiplier <- fee_multiplier;
       computed_fee = compute_fee new_lvl current_multiplier;
       CheckLvlUpFee computed_fee fee;
-      CallTransferFrom computed_fee _sender wallet;
+      CallTransferFrom computed_fee _sender wallet_o;
       CallUpgrade new_lvl token_id;
 
       e = {
@@ -220,6 +213,22 @@ transition SetFeeMultiplier(new_multiplier: Uint32)
     existing_fee_multiplier: existing_fee_multiplier;
     new_fee_multiplier: new_multiplier
   };
+  event e
+end
+
+(* @dev Updates the dmz contract address; used only by contract owner *)
+transition UpdateDMZ(new_dmz: ByStr20)
+  IsOwner;
+  dmz := new_dmz;
+  e = {_eventname: "UpdateDMZ"; new_dmz: new_dmz};
+  event e
+end
+
+(* @dev Updates the wallet contract address; used only by contract owner *)
+transition UpdateWallet(new_wallet: ByStr20)
+  IsOwner;
+  wallet := new_wallet;
+  e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
   event e
 end
 
