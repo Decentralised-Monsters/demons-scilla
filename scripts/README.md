@@ -2,6 +2,9 @@
 
 This section contains the list of scripts to deploy the contracts, transfer dmz, mint demons etc. More would be added.
 
+Execute `yarn install` before running the scripts.
+
+
 ## Deploy Auction
 ```bash
 node deploy-auction.js [private_key] [0x_dmz_addr] [0x_demon_addr] [0x_marketplace_addr]
