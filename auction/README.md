@@ -14,8 +14,8 @@ Our auction contract will have a simple interface that allows users to place bid
  * - id (Uint256) - The id of auction.
  * **Withdraw** - A transition for withdraw funds or token if sender is leader of auction.
  * - id (Uint256) - The id of auction.
- * **SetCommission** - A owner transition for change dev commission.
- * - value (Uint128) - The new dev commission percentage
+ * **UpdateCommission** - A owner transition for change dev commission.
+ * - new_commission (Uint128) - The new dev commission percentage
  * **UpdateDirectListing** - A owner transition to update the marketplace contract address.
  * - new_marketplace (ByStr20 with contract field token_orderbook: Map Uint256 Uint256 end) - The new marketplace contract address.
  * **UpdateDMZ** - A owner transition to update the dmz contract address.
@@ -35,7 +35,7 @@ contract AuctionFactory
 ## Owner Transitions
 ```Ocaml
 contract AuctionFactory
-  SetCommission(value: Uint128)
+  UpdateCommission(new_commission: Uint128)
   UpdateDirectListing(new_marketplace: ByStr20 with contract field token_orderbook: Map Uint256 Uint256 end)
   UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
@@ -128,7 +128,7 @@ bid_increment = 10
  * CodeAlreadyCanceled - If auction was canceled by owner.
  * CodeTimeOut - If `end_block` < `current_block_number`
  * CodeIsOwner - If `_sender` is not owner of auction.
- * CodeBipLessThanCurrent - if `_amount` < `highest_binding_bid`
+ * CodeBidLessThanCurrent - if `_amount` < `highest_binding_bid`
  * CodeNotFound - If id of auction doesn't found.
  * CodeIsOwner - If invoker is `token_id` owner.
  * CodeNotEndedOrCanceled - If auction in progress.
@@ -148,7 +148,7 @@ contract AuctionFactoryLib
     | CodeNotStartedYet                => Int32 -3
     | CodeAlreadyCanceled              => Int32 -4
     | CodeTimeOut                      => Int32 -5
-    | CodeBipLessThanCurrent           => Int32 -6
+    | CodeBidLessThanCurrent           => Int32 -6
     | CodeNotFound                     => Int32 -7
     | CodeIsOwner                      => Int32 -8
     | CodeNotEndedOrCanceled           => Int32 -9
