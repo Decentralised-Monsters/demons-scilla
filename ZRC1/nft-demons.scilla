@@ -395,7 +395,6 @@ end
 (* param: to       - Address to be approved for the given token_id          *)
 (* param: token_id - Unique ID of the NFT to be approved                    *)
 transition SetApprove(to: ByStr20, token_id: Uint256)
-  IsSelf to _sender;
   some_token_owner <- token_owners[token_id];
   match some_token_owner with
   | None =>
@@ -423,6 +422,7 @@ transition SetApprove(to: ByStr20, token_id: Uint256)
       end
     | None =>
       (* Add approved_spender *)
+      IsSelf to _sender;
       token_approvals[token_id] := to;
       e = {_eventname: "AddApprovalSuccess"; initiator: _sender; approved_spender: to; token_id: token_id};
       event e;

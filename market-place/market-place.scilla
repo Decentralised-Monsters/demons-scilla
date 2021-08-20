@@ -10,6 +10,7 @@ library MarketPlace
 let not_pause = Uint32 0
 let on_pause = Uint32 1
 let zero128 = Uint128 0
+let one_hundred128 = Uint128 100
 let zero_address = 0x0000000000000000000000000000000000000000
 
 let one_msg = 
@@ -95,8 +96,8 @@ field orderbook : Map Uint256 Order
                   = Emp Uint256 Order
 (* token_id to order_id mapping for quick check if card is already on sale *)
 field token_orderbook : Map Uint256 Uint256 = Emp Uint256 Uint256 
-(* Fee taken from each purchase, 1/20 or 5% of price *)
-field marketplace_fee: Uint128 = Uint128 20
+(* Fee taken from each purchase, 10% *)
+field marketplace_fee: Uint128 = Uint128 10
 
 (* Procedures *)
 procedure ThrowError(err : Error)
@@ -257,7 +258,8 @@ transition Purchase(purchase_order_id: Uint256)
   | Some (Order owner price token_id item_order_id) =>  
       (* amount is correct go ahead and remove order and transfer Dragon plus funds*)
       (* remove fee from the purchase amount*)
-      fees = builtin div price current_marketplace_fee;
+      com = builtin mul price current_marketplace_fee;
+      fees = builtin div com one_hundred128;
       sellers_amount = builtin sub price fees;
 
       wallet_o <- wallet;
