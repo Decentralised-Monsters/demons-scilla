@@ -97,7 +97,7 @@ field orderbook : Map Uint256 Order
 (* token_id to order_id mapping for quick check if card is already on sale *)
 field token_orderbook : Map Uint256 Uint256 = Emp Uint256 Uint256 
 (* Fee taken from each purchase, 10% *)
-field marketplace_fee: Uint128 = Uint128 10
+field commission: Uint128 = Uint128 10
 
 (* Procedures *)
 procedure ThrowError(err : Error)
@@ -220,10 +220,11 @@ procedure CheckTokenOwner(token_id: Uint256)
   end
 end
 
-(* Create a listing and sell a Dragon*) 
-(* First call from frontend. User wants to post an item for sale. They call this function *)
-(* then it will check if approval is okay, if so, then it will transfer Dragon to itself, *)
-(* and create the listing information and publish it as an item for sale *)
+
+(* @dev Creates a listing to sell a NFT *)
+(* User must invoke demons contract - SetApprove(marketplace_contract, token_id) prior to this *)
+(* @param token_id: The demon token_id to be put up for sale. *)
+(* @param price: The price to be sold in dmz decimal places. *)
 transition Sell(token_id: Uint256, price: Uint128)
   CheckAuctionListing token_id;
   CheckPause not_pause;
@@ -249,16 +250,18 @@ transition Sell(token_id: Uint256, price: Uint128)
   end
 end
 
-(* Purchase an order/NFT that is for sale*)     
+(* @dev Purchase a NFT that is on sale *)
+(* @param purchase_order_id: The order_id listing which contains the NFT on sale *) 
+(* User must invoke dmz contract - IncreaseAllowance(marketplace_contract, price) prior to this *)
 transition Purchase(purchase_order_id: Uint256)
   CheckPause not_pause;
   listing <- orderbook[purchase_order_id];
-  current_marketplace_fee <- marketplace_fee;
+  current_commission <- commission;
   match listing with
   | Some (Order owner price token_id item_order_id) =>  
       (* amount is correct go ahead and remove order and transfer Dragon plus funds*)
       (* remove fee from the purchase amount*)
-      com = builtin mul price current_marketplace_fee;
+      com = builtin mul price current_commission;
       fees = builtin div com one_hundred128;
       sellers_amount = builtin sub price fees;
 
@@ -324,33 +327,34 @@ transition CancelOrders(orders_list: List Uint256)
   forall orders_list CancelOrder
 end
 
-(* Admin only transitions *)
-transition ChangeMarketPlaceFee(new_fee: Uint128)
+(* @dev Updates the commission percentage *)
+(* @param new_commission: New commision, e.g. if 10%, new_commission = 10 *)
+transition UpdateCommission(new_commission: Uint128)
   IsContractOwner;
-  old_fee <- marketplace_fee;
-  marketplace_fee := new_fee;
+  old_com <- commission;
+  commission := new_commission;
   e = {
-    _eventname: "FeeChanged";
-    previous_fee: old_fee;
-    new_fee: new_fee
+    _eventname: "UpdateCommission";
+    previous_commission: old_com;
+    new_commission: new_commission
   };
   event e
 end
 
-transition ChangePause()
+(* @dev Pause or unpause the marketplace; used only by contract owner *)
+transition UpdatePause()
   IsContractOwner;
   status <- pause;
   is_pause = builtin eq status on_pause;
   match is_pause with
   | True =>
-    pause := not_pause;
-    e = {_eventname : "Working"};
-    event e
+    pause := not_pause
   | False =>
-    pause := on_pause;
-    e = {_eventname : "Paused"};
-    event e
-  end
+    pause := on_pause
+  end;
+  updated_pause <- pause;
+  e = {_eventname : "UpdatePause"; pause: updated_pause};
+  event e
 end
 
 (* @dev Updates the marketplace contract address; used only by contract owner *)

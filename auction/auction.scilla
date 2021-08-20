@@ -516,7 +516,7 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
 end
 
 (* @dev Bid on an auction listing. DMZ are locked up until Withdraw() is invoked *)
-(* User must invoke dmz contract's IncreaseAllowance(auction_contract, amount) prior to this *)
+(* User must invoke dmz contract - IncreaseAllowance(auction_contract, amount) prior to this *)
 (* @param id: Auction id *)
 (* @param amount: Bid amount (DMZ amount); if _sender is the first time bidding on this card, the bid amount is the ENTIRE amount *)
 (* If _sender has bidded before, then _sender has intention to raise his/her previous bid *)
@@ -664,7 +664,6 @@ end
 
 
 (* @dev Allows owner and bidders to claim their bids after auction has ended *)
-(* User must invoke dmz contract's IncreaseAllowance(auction_contract, amount) prior to this *)
 (* The owner would receive the winning bid amount minus the commission *)
 (* The one who wins the bid would receive their card. *)
 (* The rest would receive back their bids *)
@@ -741,14 +740,16 @@ transition Withdraw(id: Uint256)
   end
 end
 
-(* @dev Sets a new commision value *)
-transition SetCommission(value: Uint128)
+(* @dev Updates the commission percentage *)
+(* @param new_commission: New commision, e.g. if 10%, new_commission = 10 *)
+transition UpdateCommission(new_commission: Uint128)
   IsContractOwner;
-  commission := value;
-
+  old_com <- commission;
+  commission := new_commission;
   e = {
-    _eventname: "SetCommissionSuccess";
-    new_commission: value
+    _eventname: "UpdateCommission";
+    previous_commission: old_com;
+    new_commission: new_commission
   };
   event e
 end
