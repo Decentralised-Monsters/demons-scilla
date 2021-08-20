@@ -12,7 +12,7 @@ type Error =
 | CodeAlreadyCanceled
 | CodeTimeOut
 | CodeIsOwner
-| CodeBipLessThanCurrent
+| CodeBidLessThanCurrent
 | CodeNotFound
 | CodeNotEndedOrCanceled
 | CodeOnlyWithdrawn
@@ -69,7 +69,7 @@ let make_error =
       | CodeNotStartedYet                => Int32 -3
       | CodeAlreadyCanceled              => Int32 -4
       | CodeTimeOut                      => Int32 -5
-      | CodeBipLessThanCurrent           => Int32 -6
+      | CodeBidLessThanCurrent           => Int32 -6
       | CodeNotFound                     => Int32 -7
       | CodeIsOwner                      => Int32 -8
       | CodeNotEndedOrCanceled           => Int32 -9
@@ -293,7 +293,7 @@ procedure CheckApproved(token_id: Uint256)
   end
 end
 
-procedure CheckBipAmount(bid: Uint128, highest_binding_bid: Uint128)
+procedure CheckBidAmount(bid: Uint128, highest_binding_bid: Uint128)
   is_gt_current_highest = builtin lt highest_binding_bid bid;
 
   match is_gt_current_highest with
@@ -301,7 +301,7 @@ procedure CheckBipAmount(bid: Uint128, highest_binding_bid: Uint128)
   | False =>
     (* if the user isn't even willing to overbid the highest binding bid, there's nothing for us *)
     (* to do except revert the transaction. *)
-    err = CodeBipLessThanCurrent;
+    err = CodeBidLessThanCurrent;
     ThrowError err
   end
 end
@@ -549,7 +549,7 @@ transition PlaceBid(id: Uint256, amount: Uint128)
         OnlyAfterStart start_block current_block;
         OnlyBeforeEnd end_block current_block;
         OnlyNotOwner owner;
-        CheckBipAmount new_bid highest_binding_bid;
+        CheckBidAmount new_bid highest_binding_bid;
 
         (* update bid count only after checks *)
         match some_current_bid with
