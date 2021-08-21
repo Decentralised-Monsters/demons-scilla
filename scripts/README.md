@@ -29,12 +29,18 @@ node deploy-levelup.js [private_key] [0x_dmz_addr] [0x_demon_addr]
 ```
 
 ## Update Auction's Marketplace Address
-To update the auction's marketplace contract after the actual marketplace contract is deployed.
+To update the auction's marketplace contract address after the actual marketplace contract is deployed.
 
 ```bash
-node update-auction.js [private_key] [0x_auction_addr] [0x_marketplace_addr]
+node update-mp-listing.js [private_key] [0x_auction_addr] [0x_marketplace_addr]
 ```
 
+## Update Marketplace's Auction Address
+To update the marketplace's auction contract address after the actual auction contract is deployed.
+
+```bash
+node update-auction-listing.js [private_key] [0x_marketplace_addr] [0x_auction_addr]
+```
 
 ## Mint Demon
 Used by minter / contract owner
