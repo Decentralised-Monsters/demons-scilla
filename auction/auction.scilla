@@ -130,6 +130,14 @@ let min =
       | False => b
       end
 
+let compute_new_bid =
+  fun (bid_amount: Uint128) =>
+  fun (bid_increment: Uint128) =>
+    let subresult = builtin mul bid_amount bid_increment in
+      let increment = builtin div subresult one_hundred128 in
+        builtin add bid_amount increment
+
+
 (***************************************************)
 (*             The contract definition             *)
 (***************************************************)
@@ -293,8 +301,10 @@ procedure CheckApproved(token_id: Uint256)
   end
 end
 
-procedure CheckBidAmount(bid: Uint128, highest_binding_bid: Uint128)
-  is_gt_current_highest = builtin lt highest_binding_bid bid;
+(* check if bid amount is higher than the next min bid *)
+procedure CheckBidAmount(bid: Uint128, highest_binding_bid: Uint128, bid_increment: Uint128)
+  min_bid = compute_new_bid highest_binding_bid bid_increment;
+  is_gt_current_highest = builtin lt min_bid bid;
 
   match is_gt_current_highest with
   | True =>
@@ -549,7 +559,7 @@ transition PlaceBid(id: Uint256, amount: Uint128)
         OnlyAfterStart start_block current_block;
         OnlyBeforeEnd end_block current_block;
         OnlyNotOwner owner;
-        CheckBidAmount new_bid highest_binding_bid;
+        CheckBidAmount new_bid highest_binding_bid bid_increment;
 
         (* update bid count only after checks *)
         match some_current_bid with
@@ -575,7 +585,7 @@ transition PlaceBid(id: Uint256, amount: Uint128)
           (* no existings bids *)
           (* system auto adjust highest binding bid *)
           (* set the bidder as the highest bidder *)
-          new_highest_binding_bid = builtin add highest_binding_bid bid_increment;
+          new_highest_binding_bid = compute_new_bid highest_binding_bid bid_increment;
           new_highest_binding_bid = min new_highest_binding_bid new_bid;
           new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
           auctions[id] := new_auction;
@@ -589,7 +599,7 @@ transition PlaceBid(id: Uint256, amount: Uint128)
             (* increase the highestBindingBid and leave highestBidder alone. *)
             (* note that this case is impossible if _sender == highestBidder because you can never *)
             (* bid less DMZ than you've already bid. *)
-            new_highest_binding_bid = builtin add new_bid bid_increment;
+            new_highest_binding_bid = compute_new_bid new_bid bid_increment;
             new_highest_binding_bid = min new_highest_binding_bid highest_bid;
             new_auction = Auction canceled new_highest_binding_bid highest_bidder owner_has_withdrawn static;
             auctions[id] := new_auction;
@@ -597,7 +607,7 @@ transition PlaceBid(id: Uint256, amount: Uint128)
           | False =>
             (* user has bid more than highest bid *)
             (* set user as the new highestBidder and recalculate highestBindingBid. *)
-            new_highest_binding_bid = builtin add highest_bid bid_increment;
+            new_highest_binding_bid = compute_new_bid highest_bid bid_increment;
             new_highest_binding_bid = min new_bid new_highest_binding_bid;
             new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
             auctions[id] := new_auction;
