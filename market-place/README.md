@@ -11,9 +11,9 @@ The marketplace contract deals with NFTs that are sold at a fixed price. For NFT
  * - cancel_order_id (Uint256) - The `order_id` to remove the NFT.
  * **CancelOrders** - Allows contract owner to remove NFTs. (when contract is paused)
  * - orders_list (List Uint256) - A list of `order_id` to remove the NFT.
- * **ChangeMarketPlaceFee** - Allows contract owner to change the marketplace fee percentage.
- * - new_fee (Uint128) - The new marketplace fee in percentage
- * **ChangePause** - Allows contract owner to pause/unpause the contract.
+ * **UpdateCommission** - Allows contract owner to change the marketplace fee percentage.
+ * - new_commission (Uint128) - The new marketplace fee in percentage
+ * **UpdatePause** - Allows contract owner to pause/unpause the contract.
  * **UpdateAuctionListing** - Allows contract owner to update auction contract address.
  * - new_auction (ByStr20 with contract field token_auctions: Map Uint256 Uint256 end) - The new marketplace contract address.
  * **UpdateDMZ** - Allows contract owner to update dmz contract address.
@@ -33,8 +33,8 @@ contract MarketPlace
 ```Ocaml
 contract MarketPlace
   CancelOrders(orders_list: List Uint256)
-  ChangeMarketPlaceFee(new_fee: Uint128)
-  ChangePause()
+  UpdateCommission(new_fee: Uint128)
+  UpdatePause()
   UpdateAuctionListing(new_auction: ByStr20 with contract field token_auctions: Map Uint256 Uint256 end)
   UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
@@ -100,7 +100,7 @@ contract MarketPlace
  * order_id - Tracks the next available `order_id` to use
  * orderbook - Tracks marketplace listing; `order_id` -> `Order`
  * token_orderbook - Mapping of `token_id` -> `order_id`, required for other contracts to check if `token_id` already exists in marketplace
- * marketplace_fee - Value of dev commission by default 20%
+ * commission - Value of dev commission by default 10%
 
 ```Ocaml
 contract MarketPlace
@@ -116,7 +116,7 @@ contract MarketPlace
   field orderbook : Map Uint256 Order
                   = Emp Uint256 Order
   field token_orderbook : Map Uint256 Uint256 = Emp Uint256 Uint256     
-  field marketplace_fee: Uint128 = Uint128 20 
+  field commission: Uint128 = Uint128 10 
 ```
 
 ## Dummy Marketplace Contract

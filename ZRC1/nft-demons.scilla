@@ -422,6 +422,7 @@ transition SetApprove(to: ByStr20, token_id: Uint256)
       end
     | None =>
       (* Add approved_spender *)
+      IsSelf to _sender;
       token_approvals[token_id] := to;
       e = {_eventname: "AddApprovalSuccess"; initiator: _sender; approved_spender: to; token_id: token_id};
       event e;

@@ -9,7 +9,7 @@ const fs = require('fs');
 async function main() {
     const myArgs = process.argv.slice(2);
 
-    if (myArgs.length < 5) {
+    if (myArgs.length < 4) {
         console.error("Wrong arguments\n");
         console.log("node deploy-mp.js [private_key] [0x_dmz_addr] [0x_demon_addr] [0x_auction_addr]");
         return;
