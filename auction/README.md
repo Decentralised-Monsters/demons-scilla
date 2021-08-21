@@ -22,6 +22,10 @@ Our auction contract will have a simple interface that allows users to place bid
  * - new_dmz (ByStr20) - The new dmz contract address.
  * **UpdateWallet** - A owner transition to update the wallet address.
  * - new_wallet (ByStr20) - The new wallet address.
+ * **UpdateMinAuctionPrice** - A owner transition to update the minimum auction price required when users create an auction.
+ * - new_min_auction_price (Uint128) - The new minimum auction price.
+ * **UpdateMinIncrement** - A owner transition to update the minimum increment rate required when users create an auction.
+ * - new_min_increment (Uint128) - The new minimum increment rate in percentage.
 
 ## Users Transitions
 ```Ocaml
@@ -39,6 +43,8 @@ contract AuctionFactory
   UpdateDirectListing(new_marketplace: ByStr20 with contract field token_orderbook: Map Uint256 Uint256 end)
   UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
+  UpdateMinAuctionPrice(new_min_auction_price: Uint128)
+  UpdateMinIncrement(new_min_increment: Uint128)
 ```
 
 ## Callbacks
@@ -159,6 +165,8 @@ contract AuctionFactoryLib
     | CodeTokenAlreadyInAuction        => Int32 -14
     | CodeTokenListedInDirectSale      => Int32 -15
     | CodeAuctionNotApprovedToTransfer => Int32 -16
+    | CodeIncrementLessThanRequired    => Int32 -17
+    | CodePriceLessThanRequired        => Int32 -18
 ```
 
 
@@ -172,6 +180,8 @@ contract AuctionFactoryLib
  * token_auctions - Mapping of `token_id` -> `auction_id`, required for other contracts to check if `token_id` already exists in auction.
  * total - A counter for generate `auction_id`.
  * commission - Value of dev commission by default 10%.
+ * min_increment - Value of minimum bid increment rate when creating an auction.
+ * min_auction_price - Value of minimum auction price when creating an auction.
 
 ```Ocaml
 contract AuctionFactory
@@ -190,6 +200,8 @@ contract AuctionFactory
   field auctions: Map Uint256 Auction = Emp Uint256 Auction
   field total: Uint256 = zero256
   field commission: Uint128 = Uint128 10
+  field min_increment: Uint128 = Uint128 5
+  field min_auction_price: Uint128 = Uint128 1000000000000000000
 ```
 
 ## Dummy Auction Contract

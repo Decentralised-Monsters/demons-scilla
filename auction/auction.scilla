@@ -1,6 +1,6 @@
 scilla_version 0
 
-import BoolUtils
+import BoolUtils IntUtils
 
 library AuctionFactoryLib
 
@@ -22,6 +22,8 @@ type Error =
 | CodeTokenAlreadyInAuction
 | CodeTokenListedInDirectSale
 | CodeAuctionNotApprovedToTransfer
+| CodeIncrementLessThanRequired
+| CodePriceLessThanRequired
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -80,6 +82,8 @@ let make_error =
       | CodeTokenAlreadyInAuction        => Int32 -14
       | CodeTokenListedInDirectSale      => Int32 -15
       | CodeAuctionNotApprovedToTransfer => Int32 -16
+      | CodeIncrementLessThanRequired    => Int32 -17
+      | CodePriceLessThanRequired        => Int32 -18 
       end
     in
     { _exception : "Error"; code : result_code }
@@ -173,6 +177,10 @@ field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
 field token_auctions: Map Uint256 Uint256 = Emp Uint256 Uint256
 field total: Uint256 = zero256
 field commission: Uint128 = Uint128 10
+(* min bid increment in percentage *)
+field min_increment: Uint128 = Uint128 5
+(* min price to sell; 1 DMZ *)
+field min_auction_price: Uint128 = Uint128 1000000000000000000
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -301,6 +309,19 @@ procedure CheckApproved(token_id: Uint256)
   end
 end
 
+(* check if auction price is set below the min price *)
+procedure CheckAuctionPrice(min_price: Uint128)
+  min_auction_price_o <- min_auction_price;
+  is_gte_min = uint128_ge min_price min_auction_price_o;
+  match is_gte_min with
+  | True =>
+  | False =>
+    err = CodePriceLessThanRequired;
+    ThrowError err
+  end
+end
+
+
 (* check if bid amount is higher than the next min bid *)
 procedure CheckBidAmount(bid: Uint128, highest_binding_bid: Uint128, bid_increment: Uint128)
   min_bid = compute_new_bid highest_binding_bid bid_increment;
@@ -315,6 +336,19 @@ procedure CheckBidAmount(bid: Uint128, highest_binding_bid: Uint128, bid_increme
     ThrowError err
   end
 end
+
+(* check if bid increment set below min bid increment *)
+procedure CheckBidIncrement(bid_increment: Uint128)
+  min_increment_o <- min_increment;
+  is_gte_min = uint128_ge bid_increment min_increment_o;
+  match is_gte_min with
+  | True =>
+  | False =>
+    err = CodeIncrementLessThanRequired;
+    ThrowError err
+  end
+end
+
 
 (* check if token_id is already in marketplace contract *)
 procedure CheckDirectListing(token_id: Uint256)
@@ -477,7 +511,7 @@ end
 
 (* @dev Put up a card for auction listing. *)
 (* User must invoke demon contract - SetApprove(auction_contract, token_id) prior to this *)
-(* @param bid_increment: Min increment for each bid *)
+(* @param bid_increment: Min increment percentage rate for each subsequent bid *)
 (* @param min_price: Starting bid price *)
 (* @param start_block: Block number at which the auction should begin *)
 (* @param end_block: Block number at which the auction should end *)
@@ -486,6 +520,8 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
   CheckApproved token_id;
   CheckDirectListing token_id;
   CheckTokenOwner token_id;
+  CheckBidIncrement bid_increment;
+  CheckAuctionPrice min_price;
 
   current_block <-& BLOCKNUMBER;
   total_ids <- total;
@@ -785,6 +821,22 @@ transition UpdateWallet(new_wallet: ByStr20)
   IsContractOwner;
   wallet := new_wallet;
   e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
+  event e
+end
+
+(* @dev Updates the min auction price required when users create an auction; used only by contract owner *)
+transition UpdateMinAuctionPrice(new_min_auction_price: Uint128)
+  IsContractOwner;
+  min_auction_price := new_min_auction_price;
+  e = {_eventname: "UpdateMinAuctionPrice"; new_min_auction_price: new_min_auction_price};
+  event e
+end
+
+(* @dev Updates the min increment rate required when users create an auction; used only by contract owner *)
+transition UpdateMinIncrement(new_min_increment: Uint128)
+  IsContractOwner;
+  min_increment := new_min_increment;
+  e = {_eventname: "UpdateMinIncrement"; new_min_increment: new_min_increment};
   event e
 end
 
