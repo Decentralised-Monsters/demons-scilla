@@ -325,9 +325,9 @@ end
 (* check if bid amount is higher than the next min bid *)
 procedure CheckBidAmount(bid: Uint128, highest_binding_bid: Uint128, bid_increment: Uint128)
   min_bid = compute_new_bid highest_binding_bid bid_increment;
-  is_gt_current_highest = builtin lt min_bid bid;
+  is_gte_current_highest = uint128_ge bid min_bid;
 
-  match is_gt_current_highest with
+  match is_gte_current_highest with
   | True =>
   | False =>
     (* if the user isn't even willing to overbid the highest binding bid, there's nothing for us *)
