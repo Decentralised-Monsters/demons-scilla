@@ -31,6 +31,38 @@ let option_value =
 
 let option_address = @option_value ByStr20
 
+let uint128_to_uint256 : Uint128 -> Uint256 =
+  fun (x : Uint128) =>
+    let ox256 = builtin to_uint256 x in
+      match ox256 with
+      | None =>
+        (* this never happens, hence we throw a division by zero exception just in case *)
+        let zero = Uint256 0 in
+        builtin div zero zero
+      | Some x256 => x256
+      end
+
+(* Compute "(x * y) / z" with protection against integer overflows *)
+let muldiv : Uint128 -> Uint128 -> Uint128 -> Uint128 =
+    fun (x : Uint128) =>
+    fun (y : Uint128) =>
+    fun (z : Uint128) =>
+      let x256 = uint128_to_uint256 x in
+      let y256 = uint128_to_uint256 y in
+      let z256 = uint128_to_uint256 z in
+      let x_mul_y256 = builtin mul x256 y256 in
+      let res256 = builtin div x_mul_y256 z256 in
+      let ores128 = builtin to_uint128 res256 in
+      match ores128 with
+      | None =>
+        (* this must never happen, hence we throw an integer overflow exception *)
+        let max_uint128 = Uint128 340282366920938463463374607431768211455 in
+        let fourtytwo128 = Uint128 42 in
+        builtin mul max_uint128 fourtytwo128
+      | Some res128 =>
+        res128
+      end
+
 (*ByStr20 - Address of owner*)
 (*Uint128 - Price*)
 (*Uint256 - tokenID*)
@@ -98,8 +130,8 @@ field orderbook : Map Uint256 Order
                   = Emp Uint256 Order
 (* token_id to order_id mapping for quick check if card is already on sale *)
 field token_orderbook : Map Uint256 Uint256 = Emp Uint256 Uint256 
-(* Fee taken from each purchase, 10% *)
-field commission: Uint128 = Uint128 10
+(* Fee taken from each purchase, 5% *)
+field commission: Uint128 = Uint128 5
 
 (* Procedures *)
 procedure ThrowError(err : Error)
@@ -125,7 +157,7 @@ procedure CheckCommission(new_commission: Uint128)
   is_gte_zero = uint128_ge new_commission zero128;
   is_lte_hundred = uint128_le new_commission one_hundred128;
   is_within_range = andb is_gte_zero is_lte_hundred;
-  
+
   match is_within_range with
   | True =>
   | False =>
@@ -278,8 +310,7 @@ transition Purchase(purchase_order_id: Uint256)
   | Some (Order owner price token_id item_order_id) =>  
       (* amount is correct go ahead and remove order and transfer Dragon plus funds*)
       (* remove fee from the purchase amount*)
-      com = builtin mul price current_commission;
-      fees = builtin div com one_hundred128;
+      fees = muldiv price current_commission one_hundred128;
       sellers_amount = builtin sub price fees;
 
       wallet_o <- wallet;
