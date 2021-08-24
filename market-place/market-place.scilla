@@ -3,7 +3,7 @@ scilla_version 0
 (***************************************************)
 (*               Associated library                *)
 (***************************************************)
-import IntUtils
+import BoolUtils IntUtils
 
 library MarketPlace
 
@@ -47,6 +47,7 @@ type Error =
   | CodePauseNotPause
   | CodeTokenListedInAuction
   | CodeTokenAlreadyListed
+  | CodeCommissionOutOfRange
 
 let make_error =
   fun (result : Error) =>
@@ -59,6 +60,7 @@ let make_error =
       | CodePauseNotPause            => Int32 -5
       | CodeTokenListedInAuction     => Int32 -6
       | CodeTokenAlreadyListed       => Int32 -7
+      | CodeCommissionOutOfRange     => Int32 -8
       end
     in
     { _exception : "Error"; code : result_code }
@@ -114,6 +116,20 @@ procedure CheckApproved(token_id: Uint256)
   | True =>
   | False =>
     err = CodeMPNotApprovedToTransfer;
+    ThrowError err
+  end
+end
+
+(* check commission is between 0 to 100% *)
+procedure CheckCommission(new_commission: Uint128)
+  is_gte_zero = uint128_ge new_commission zero128;
+  is_lte_hundred = uint128_le new_commission one_hundred128;
+  is_within_range = andb is_gte_zero is_lte_hundred;
+  
+  match is_within_range with
+  | True =>
+  | False =>
+    err = CodeCommissionOutOfRange;
     ThrowError err
   end
 end
@@ -334,6 +350,7 @@ end
 (* @param new_commission: New commision, e.g. if 10%, new_commission = 10 *)
 transition UpdateCommission(new_commission: Uint128)
   IsContractOwner;
+  CheckCommission new_commission;
   old_com <- commission;
   commission := new_commission;
   e = {
