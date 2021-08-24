@@ -197,7 +197,27 @@ Init:
 Also this level-up contract should be minter, you need call on `Main` contract need call `ConfigureMinter` with `minter` = "0x1091f96a72677c8bea1cae379eeac8713a6e6ea6"
 example: [viewblock](https://viewblock.io/zilliqa/tx/4665571b18bdb0acad2f105212aea77217b35add8ef064db15c6a0efa810fbf8?network=testnet)
 
-### 7: [Deploy Auctino contract:](https://github.com/hicaru/demons-scilla/tree/master/auction)
+### 7: [Deploy Auction contract:](https://github.com/hicaru/demons-scilla/tree/master/auction)
+
+Before deploying auction contract, we need to deploy [dummy marketplace contract](/market-place/dummy_marketplace.scilla). Why? Because the auction contract requires the marketplace contract address as immutable field. We can deploy auction or marketplace first, but anyhow we need one of it to be dummy first.
+
+Example, deploy auction contract first:
+```
+1. Deploy dummy marketplace
+2. Deploy auction with dummy marketplace address as immutable field
+3. Deploy marketplace with auction address
+4. Update auction contract marketplace address by calling UpdateDirectListing() with deployed marketplace
+```
+
+OR
+
+Deploy marketplace contract first:
+```
+1. Deploy dummy auction
+2. Deploy marketplace with dummy auction address as immutable field
+3. Deploy auction with marketplace address
+4. Update marketplace contract auction address by calling UpdateAuctionListing() with deployed auction
+```
 
 Init:
 ```json
@@ -216,10 +236,18 @@ Init:
         "type": "ByStr20",
         "value": "0xeb9b2acf86d52c900fc01852bb351ebc91c96f38",
         "vname": "main"
+    },
+    {
+        "type": "ByStr20",
+        "value": "0x6c4acb620d8c4032bbf104ccc12a22c936608c7d",
+        "vname": "init_marketplace"
     }
 ]
 ```
 => "0x8550c1f62f4a40081600a6986c6e420a75ebdece"
+
+Remeber to execute `UpdateDirectListing` to replace to dummy marketplace address once you have deployed the actual marketplace contract!
+
 
 ### 7: [Deploy MarketPlace contract:](https://github.com/hicaru/demons-scilla/tree/master/market-place)
 
@@ -240,7 +268,14 @@ Init:
         "type": "ByStr20",
         "value": "0xeb9b2acf86d52c900fc01852bb351ebc91c96f38",
         "vname": "main"
+    },
+    {
+        "type": "ByStr20",
+        "value": "0xda6bbb92765b58c7fafb152a3fc04a03b433b32b",
+        "vname": "init_auction"
     }
 ]
 ```
 => "0x728f6affcdcf5fb8d9b13879c90ce9a4491a7e81"
+
+Remeber to execute `UpdateAuctionListing` to replace to dummy auction address once you have deployed the actual auction contract!

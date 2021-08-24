@@ -2,13 +2,9 @@ scilla_version 0
 
 library LVLUpLib
 
-(* Error events *)
-type Error =
-| CodeNotOwner
-| CodeNotFound
-| CodeMaxLVL
 
-let decimals = Uint128 200000000000000000
+(* number of decimals as specified in DMZ contract *)
+let decimals = Uint128 1000000000000000000
 let one128 = Uint128 1
 let zero128 = Uint128 0
 
@@ -29,16 +25,16 @@ let option_value =
 let option_128 = @option_value Uint128
 let option_32 = @option_value Uint32
 
-(* amount // DECIMAL + current_lvl *)
-let lvl_up =
-  fun (amount: Uint128) => 
-  fun (current_lvl: Uint32) =>
-    let some_lvl = builtin to_uint128 current_lvl in
+(* compute the fee requried for level up against the fee paid by user *)
+let compute_fee =
+  fun (new_lvl: Uint32) =>
+  fun (fee_multiplier: Uint32) =>
+    let some_lvl = builtin to_uint128 new_lvl in
     let lvl = option_128 one128 some_lvl in
-    let value = builtin div amount decimals in
-    let next_lvl = builtin add value lvl in
-    let some_next_lvl = builtin to_uint32 next_lvl in
-      option_32 current_lvl some_next_lvl
+    let some_multiplier = builtin to_uint128 fee_multiplier in
+    let multiplier = option_128 one128 some_multiplier in
+    let fee = builtin mul lvl multiplier in
+    builtin mul fee decimals
 
 let check_max_lvl =
   fun (lvl: Uint32) =>
@@ -49,29 +45,52 @@ let check_max_lvl =
       | False => max
       end
 
+let increment_lvl =
+  fun (current_lvl: Uint32) =>
+  fun (max_lvl: Uint32) =>
+    let add_lvl = Uint32 1 in
+    let new_lvl = builtin add current_lvl add_lvl in
+    let is_max = builtin lt new_lvl max_lvl in
+      match is_max with
+      | True => new_lvl
+      | False => max_lvl
+      end
+
+(* Error events *)
+type Error =
+| CodeNotOwner
+| CodeNotFound
+| CodeMaxLVL
+| CodeInsufficientFee
+
 let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotOwner => Int32 -1
-      | CodeNotFound => Int32 -2
-      | CodeMaxLVL   => Int32 -3
+      | CodeNotOwner        => Int32 -1
+      | CodeNotFound        => Int32 -2
+      | CodeMaxLVL          => Int32 -3
+      | CodeInsufficientFee => Int32 -4
       end
     in
     { _exception : "Error"; code : result_code }
 
+
 contract LVLUpContract
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  dmz: ByStr20,
+  init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_lvl: Map Uint256 Uint32
   end
 )
 
 (* Mutable fields *)
-field max_lvl: Uint32 = Uint32 5999
+field dmz: ByStr20 = init_dmz
+field wallet: ByStr20 = init_wallet
+field max_lvl: Uint32 = Uint32 5
+field fee_multiplier: Uint32 = Uint32 100
 
 (**************************************)
 (*             Procedures             *)
@@ -105,9 +124,10 @@ procedure CallUpgrade(new_lvl: Uint32, token_id: Uint256)
 end
 
 procedure CallTransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
+  dmz_o <- dmz;
   call_transfer_from = {
     _tag: "TransferFrom";
-    _recipient: dmz;
+    _recipient: dmz_o;
     _amount: Uint128 0;
     from: from;
     to: to;
@@ -117,7 +137,24 @@ procedure CallTransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
   send msgs
 end
 
-transition Upgrade(amount: Uint128, token_id: Uint256)
+(* Checks if user has paid the correct amount to unlock the next level *)
+(* Fee calculation = lvl * 10 DMZ, e.g. to unlock level 2, user has to pay 20 DMZ (2 * 10 DMZ) *)
+procedure CheckLvlUpFee(computed_fee: Uint128, paid_fee: Uint128)
+  is_less = builtin lt paid_fee computed_fee;
+  match is_less with
+  | True =>
+    err = CodeInsufficientFee;
+    ThrowError err
+  | False =>
+  end
+end
+
+
+(* @dev Upgrade a card to the next level. A card cannot be upgraded past the max level. *)
+(* @param fee: Number of DMZ to pay as fees to unlock the next level, should be in DMZ decimals *)
+(* @param token_id: Card to be upgraded *)
+(* @pre LvlUp contract address must be one of the minter in NFTDemons contract so as to invoke CallUpgrade() *)
+transition Upgrade(fee: Uint128, token_id: Uint256)
   some_current_lvl <-& main.token_lvl[token_id];
 
   match some_current_lvl with
@@ -130,11 +167,20 @@ transition Upgrade(amount: Uint128, token_id: Uint256)
       err = CodeMaxLVL;
       ThrowError err
     | False =>
-      value = lvl_up amount current_lvl;
-      value = check_max_lvl value max;
+      new_lvl = increment_lvl current_lvl max;
+      
+      wallet_o <- wallet;
+      current_multiplier <- fee_multiplier;
+      computed_fee = compute_fee new_lvl current_multiplier;
+      CheckLvlUpFee computed_fee fee;
+      CallTransferFrom computed_fee _sender wallet_o;
+      CallUpgrade new_lvl token_id;
 
-      CallTransferFrom amount _sender wallet;
-      CallUpgrade value token_id
+      e = {
+        _eventname: "Upgrade";
+        level: new_lvl
+      };
+      event e
     end
   | None =>
     err = CodeNotFound;
@@ -142,15 +188,47 @@ transition Upgrade(amount: Uint128, token_id: Uint256)
   end
 end
 
+(* @dev Used only by contract owner. Sets the max level. *)
 transition SetMaxLVL(value: Uint32)
   IsOwner;
 
+  existing_max_lvl <- max_lvl;
   max_lvl := value;
 
   e = {
     _eventname: "SetMaxLVLSuccess";
-    value: value
+    existing_max_lvl: existing_max_lvl;
+    new_max_lvl: value
   };
+  event e
+end
+
+(* @dev  Used only by contract owner. Sets the fee multiplier. Fee multiplier is used to compute card upgrade fee. *)
+transition SetFeeMultiplier(new_multiplier: Uint32)
+  IsOwner;
+  existing_fee_multiplier <- fee_multiplier;
+  fee_multiplier := new_multiplier;
+  e = {
+    _eventname: "SetFeeMultiplier";
+    existing_fee_multiplier: existing_fee_multiplier;
+    new_fee_multiplier: new_multiplier
+  };
+  event e
+end
+
+(* @dev Updates the dmz contract address; used only by contract owner *)
+transition UpdateDMZ(new_dmz: ByStr20)
+  IsOwner;
+  dmz := new_dmz;
+  e = {_eventname: "UpdateDMZ"; new_dmz: new_dmz};
+  event e
+end
+
+(* @dev Updates the wallet contract address; used only by contract owner *)
+transition UpdateWallet(new_wallet: ByStr20)
+  IsOwner;
+  wallet := new_wallet;
+  e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
   event e
 end
 

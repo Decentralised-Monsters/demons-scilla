@@ -35,7 +35,7 @@ let one = Uint256 1
 
 let zero32 = Uint32 0
 let one32 = Uint32 1
-let min_lvl = Uint32 1000
+let min_lvl = Uint32 0
 
 let dummy_str = ""
 let verdad = Dummy
@@ -43,6 +43,17 @@ let add_operation = Add
 let sub_operation = Sub
 
 (* Library functions *)
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_32 = @option_value Uint32
+
 let one_msg = 
   fun (msg : Message) => 
     let nil_msg = Nil {Message} in
@@ -239,7 +250,7 @@ procedure UpdateTokenCount(operation: Operation, address: ByStr20)
     new_to_count = 
       let current_count = get_bal some_to_count in
       builtin add current_count one;
-    owned_token_count[address] := new_to_count
+      owned_token_count[address] := new_to_count
   | Sub =>
     some_from_count <- owned_token_count[address];
     new_from_count = 
@@ -249,7 +260,14 @@ procedure UpdateTokenCount(operation: Operation, address: ByStr20)
           | True => zero
           | False => builtin sub current_count one
           end;
-    owned_token_count[address] := new_from_count
+    is_zero = builtin eq new_from_count zero;
+
+    match is_zero with
+    | True =>
+      delete owned_token_count[address]
+    | False =>
+      owned_token_count[address] := new_from_count
+    end
   end
 end
 
@@ -341,7 +359,7 @@ transition BatchMint(to: ByStr20, token_uris_list: List String)
   send msgs
 end
 
-(* @param:  token_id - Unique ID of the NFT to be destroyed                       *)
+(* @param:  token_id - Unique ID of the NFT to be destroyed *)
 transition Burn(token_id: Uint256)
   (* Check if token exists *)
   some_token_owner <- token_owners[token_id];
@@ -404,6 +422,7 @@ transition SetApprove(to: ByStr20, token_id: Uint256)
       end
     | None =>
       (* Add approved_spender *)
+      IsSelf to _sender;
       token_approvals[token_id] := to;
       e = {_eventname: "AddApprovalSuccess"; initiator: _sender; approved_spender: to; token_id: token_id};
       event e;
@@ -473,13 +492,30 @@ transition SetName(token_id: Uint256, new_name: String)
   event e
 end
 
+(* @dev Modify the image URI; used only by contract owner *)
+transition SetImageURI(token_id: Uint256, new_uri: String)
+  IsContractOwner;
+  prev_uri <- token_uris[token_id];
+  token_uris[token_id] := new_uri;
+  e = {
+    _eventname: "ImageURIChangeSuccess";
+    prev_uri: prev_uri;
+    new_uri: new_uri
+  };
+  event e
+end
+
 transition ChangeLVL(token_id: Uint256, value: Uint32)
   IsMinter _sender;
+  prev_lvl <- token_lvl[token_id];
+  existing_lvl = option_32 zero32 prev_lvl;
   token_lvl[token_id] := value;
 
   e = {
     _eventname: "LevelUpgraded";
-    value: value
+    token_id: token_id;
+    prev_lvl: existing_lvl;
+    new_lvl: value
   };
   event e
 end

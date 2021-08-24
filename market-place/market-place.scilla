@@ -9,18 +9,14 @@ library MarketPlace
 
 let not_pause = Uint32 0
 let on_pause = Uint32 1
+let zero128 = Uint128 0
+let one_hundred128 = Uint128 100
 let zero_address = 0x0000000000000000000000000000000000000000
 
 let one_msg = 
   fun (msg : Message) => 
   let nil_msg = Nil {Message} in
     Cons {Message} msg nil_msg
-
-let two_msgs =
-  fun (msg1 : Message) =>
-  fun (msg2 : Message) =>
-    let msgs_tmp = one_msg msg2 in
-      Cons {Message} msg1 msgs_tmp
 
 let one = Uint256 1
 
@@ -44,25 +40,25 @@ type Order =
 
 (* Error exceptions *)
 type Error =
-  | CodeMPnotApprovedToTransfer
-  | CodeOrderWrongState
+  | CodeMPNotApprovedToTransfer
   | CodeOrderNotFound
-  | CodePaymentAmountError
   | CodeNotAuthorized
   | CodeNotTokenOwner
   | CodePauseNotPause
+  | CodeTokenListedInAuction
+  | CodeTokenAlreadyListed
 
 let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeMPnotApprovedToTransfer  => Int32 -1
-      | CodeOrderWrongState          => Int32 -2
-      | CodeOrderNotFound            => Int32 -3
-      | CodePaymentAmountError       => Int32 -4
-      | CodeNotAuthorized            => Int32 -5
-      | CodeNotTokenOwner            => Int32 -6
-      | CodePauseNotPause            => Int32 -7
+      | CodeMPNotApprovedToTransfer  => Int32 -1
+      | CodeOrderNotFound            => Int32 -2
+      | CodeNotAuthorized            => Int32 -3
+      | CodeNotTokenOwner            => Int32 -4
+      | CodePauseNotPause            => Int32 -5
+      | CodeTokenListedInAuction     => Int32 -6
+      | CodeTokenAlreadyListed       => Int32 -7
       end
     in
     { _exception : "Error"; code : result_code }
@@ -74,13 +70,23 @@ let make_error =
 contract MarketPlace
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  dmz: ByStr20,
+  init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_owners: Map Uint256 ByStr20,
     field token_approvals: Map Uint256 ByStr20
+  end,
+  init_auction: ByStr20 with contract
+    field token_auctions: Map Uint256 Uint256
   end
 )
+
+
+field dmz: ByStr20 = init_dmz
+field wallet: ByStr20 = init_wallet
+field auction_listing: ByStr20 with contract
+  field token_auctions: Map Uint256 Uint256
+end = init_auction
 
 field pause: Uint32 = not_pause
 (*Order IDs - use global variable to track order numbers *)
@@ -88,8 +94,10 @@ field order_id : Uint256 = Uint256 0
 (* Orderbook: mapping (order_id => ( Order struct )) *)
 field orderbook : Map Uint256 Order
                   = Emp Uint256 Order
-(* Fee taken from each purchase, 1/20 or 5% of price *)
-field marketplace_fee: Uint128 = Uint128 20
+(* token_id to order_id mapping for quick check if card is already on sale *)
+field token_orderbook : Map Uint256 Uint256 = Emp Uint256 Uint256 
+(* Fee taken from each purchase, 10% *)
+field commission: Uint128 = Uint128 10
 
 (* Procedures *)
 procedure ThrowError(err : Error)
@@ -105,16 +113,17 @@ procedure CheckApproved(token_id: Uint256)
   match is_self with
   | True =>
   | False =>
-    err = CodeMPnotApprovedToTransfer;
+    err = CodeMPNotApprovedToTransfer;
     ThrowError err
   end
 end
 
 procedure CallTransferFromDMZ(amount: Uint128, from: ByStr20, to: ByStr20)
+  dmz_o <- dmz;
   call_transfer_from = {
     _tag: "TransferFrom";
-    _recipient: dmz;
-    _amount: Uint128 0;
+    _recipient: dmz_o;
+    _amount: zero128;
     from: from;
     to: to;
     amount: amount
@@ -127,7 +136,7 @@ procedure TransferToOwner(token_id: Uint256, owner: ByStr20)
   transfered = {
     _tag: "Transfer";
     _recipient: main;
-    _amount: Uint128 0;
+    _amount: zero128;
     to: owner;
     token_id: token_id
   };
@@ -139,7 +148,7 @@ procedure TransferToMarketPlace(token_id: Uint256)
   transfered = {
     _tag: "TransferFrom";
     _recipient: main;
-    _amount: Uint128 0;
+    _amount: zero128;
     to: _this_address;
     token_id: token_id
   };
@@ -185,6 +194,20 @@ procedure CancelOrder(cancel_order_id: Uint256)
   end
 end
 
+(* check if token_id is already in auction contract *)
+procedure CheckAuctionListing(token_id: Uint256)
+  current_auction_listing <- auction_listing;
+  auction_id <-& current_auction_listing.token_auctions[token_id];
+  
+  match auction_id with
+  | Some id =>
+    err = CodeTokenListedInAuction;
+    ThrowError err
+  | None =>
+  end
+end
+
+
 procedure CheckTokenOwner(token_id: Uint256)
   some_token_owner <-& main.token_owners[token_id];
   dragon_owner = option_address zero_address some_token_owner;
@@ -197,40 +220,58 @@ procedure CheckTokenOwner(token_id: Uint256)
   end
 end
 
-(* Create a listing and sell a Dragon*) 
-(* First call from frontend. User wants to post an item for sale. They call this function *)
-(* then it will check if approval is okay, if so, then it will transfer Dragon to itself, *)
-(* and create the listing information and publish it as an item for sale *)
+
+(* @dev Creates a listing to sell a NFT *)
+(* User must invoke demons contract - SetApprove(marketplace_contract, token_id) prior to this *)
+(* @param token_id: The demon token_id to be put up for sale. *)
+(* @param price: The price to be sold in dmz decimal places. *)
 transition Sell(token_id: Uint256, price: Uint128)
+  CheckAuctionListing token_id;
   CheckPause not_pause;
   CheckApproved token_id;
   CheckTokenOwner token_id;
-  TransferToMarketPlace token_id;
 
-  current_order_id <- order_id;
-  new_order = Order _sender price token_id current_order_id;
-  orderbook[current_order_id] := new_order;
+  some_order_id <- token_orderbook[token_id];
 
-  new_order_id = builtin add current_order_id one;
-  order_id := new_order_id
+  match some_order_id with
+  | Some existing_order =>
+    (* token_id is already listed on sale *)
+    err = CodeTokenAlreadyListed;
+    ThrowError err
+  | None =>
+    TransferToMarketPlace token_id;
+    current_order_id <- order_id;
+    new_order = Order _sender price token_id current_order_id;
+    orderbook[current_order_id] := new_order;
+    token_orderbook[token_id] := current_order_id;
+
+    new_order_id = builtin add current_order_id one;
+    order_id := new_order_id
+  end
 end
 
-(* Purchase an order/NFT that is for sale*)     
+(* @dev Purchase a NFT that is on sale *)
+(* @param purchase_order_id: The order_id listing which contains the NFT on sale *) 
+(* User must invoke dmz contract - IncreaseAllowance(marketplace_contract, price) prior to this *)
 transition Purchase(purchase_order_id: Uint256)
   CheckPause not_pause;
   listing <- orderbook[purchase_order_id];
-  current_marketplace_fee <- marketplace_fee;
+  current_commission <- commission;
   match listing with
   | Some (Order owner price token_id item_order_id) =>  
       (* amount is correct go ahead and remove order and transfer Dragon plus funds*)
       (* remove fee from the purchase amount*)
-      fees = builtin div price current_marketplace_fee;
+      com = builtin mul price current_commission;
+      fees = builtin div com one_hundred128;
       sellers_amount = builtin sub price fees;
 
+      wallet_o <- wallet;
       CallTransferFromDMZ sellers_amount _sender owner;
-      CallTransferFromDMZ fees _sender wallet;
+      CallTransferFromDMZ fees _sender wallet_o;
+
       (* Delete the order from the orderbook*)
       delete orderbook[item_order_id];
+      delete token_orderbook[token_id];
       (* transfer to new owner*)
       TransferToOwner token_id _sender;
       e = {
@@ -262,6 +303,7 @@ transition CancelListing(cancel_order_id : Uint256)
     | True => 
       (*Go ahead delete the order and return Dragon*)
       delete orderbook[item_order_id];
+      delete token_orderbook[token_id];
       e = {
         _eventname: "OrderCanceled";
         extracted_order: item_order_id
@@ -286,36 +328,61 @@ transition CancelOrders(orders_list: List Uint256)
   forall orders_list CancelOrder
 end
 
-(* Admin only transitions *)
-transition ChangeMarketPlaceFee(new_fee: Uint128)
+(* @dev Updates the commission percentage *)
+(* @param new_commission: New commision, e.g. if 10%, new_commission = 10 *)
+transition UpdateCommission(new_commission: Uint128)
   IsContractOwner;
-  old_fee <- marketplace_fee;
-  marketplace_fee := new_fee;
+  old_com <- commission;
+  commission := new_commission;
   e = {
-    _eventname: "FeeChanged";
-    previous_fee: old_fee;
-    new_fee: new_fee
+    _eventname: "UpdateCommission";
+    previous_commission: old_com;
+    new_commission: new_commission
   };
   event e
 end
 
-transition ChangePause()
+(* @dev Pause or unpause the marketplace; used only by contract owner *)
+transition UpdatePause()
   IsContractOwner;
   status <- pause;
   is_pause = builtin eq status on_pause;
   match is_pause with
   | True =>
-    pause := not_pause;
-    e = {_eventname : "Working"};
-    event e
+    pause := not_pause
   | False =>
-    pause := on_pause;
-    e = {_eventname : "Paused"};
-    event e
-  end
+    pause := on_pause
+  end;
+  updated_pause <- pause;
+  e = {_eventname : "UpdatePause"; pause: updated_pause};
+  event e
+end
+
+(* @dev Updates the marketplace contract address; used only by contract owner *)
+transition UpdateAuctionListing(new_auction: ByStr20 with contract field token_auctions: Map Uint256 Uint256 end)
+  IsContractOwner;
+  auction_listing := new_auction;
+  e = {_eventname : "UpdateAuctionListing"; new_auction_listing: new_auction};
+  event e
+end
+
+(* @dev Updates the dmz contract address; used only by contract owner *)
+transition UpdateDMZ(new_dmz: ByStr20)
+  IsContractOwner;
+  dmz := new_dmz;
+  e = {_eventname: "UpdateDMZ"; new_dmz: new_dmz};
+  event e
+end
+
+(* @dev Updates the wallet contract address; used only by contract owner *)
+transition UpdateWallet(new_wallet: ByStr20)
+  IsContractOwner;
+  wallet := new_wallet;
+  e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
+  event e
 end
 
 (*Empty callbacks*)
-
+(* required for marketplace CallTransferFromDMZ *)
 transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
