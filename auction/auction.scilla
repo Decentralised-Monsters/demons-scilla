@@ -176,7 +176,7 @@ field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
 (* token_id to auction_id mapping for quick check if card is already up for auction *)
 field token_auctions: Map Uint256 Uint256 = Emp Uint256 Uint256
 field total: Uint256 = zero256
-field commission: Uint128 = Uint128 10
+field commission: Uint128 = Uint128 5
 (* min bid increment in percentage *)
 field min_increment: Uint128 = Uint128 5
 (* min price to sell; 1 DMZ *)
