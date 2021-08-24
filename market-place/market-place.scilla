@@ -282,6 +282,7 @@ end
 (* Cancel an order and refund the NFT when the contract is on pause *)
 transition CancelOrders(orders_list: List Uint256)
   CheckPause on_pause;
+  IsContractOwner;
   forall orders_list CancelOrder
 end
 
