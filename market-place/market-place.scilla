@@ -295,6 +295,7 @@ end
 (* Cancel listing, remove it, and transfer Dragon back to owner*) 
 (* Only performed by owner of listing*)
 transition CancelListing(cancel_order_id : Uint256)
+  CheckPause not_pause;
   listing <- orderbook[cancel_order_id];
   match listing with
   | Some (Order owner price token_id item_order_id) =>  
