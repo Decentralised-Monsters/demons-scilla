@@ -182,6 +182,7 @@ procedure CancelOrder(cancel_order_id: Uint256)
   match listing with
   | Some (Order owner price token_id item_order_id) =>
     delete orderbook[item_order_id];
+    delete token_orderbook[token_id];
     e = {
       _eventname: "OrderCancelled";
       item_order_id: item_order_id
