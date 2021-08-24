@@ -210,8 +210,8 @@ end
 
 procedure CheckTokenOwner(token_id: Uint256)
   some_token_owner <-& main.token_owners[token_id];
-  dragon_owner = option_address zero_address some_token_owner;
-  is_address_call = builtin eq _sender dragon_owner;
+  token_owner = option_address zero_address some_token_owner;
+  is_address_call = builtin eq _sender token_owner;
   match is_address_call with
   | False =>
     err = CodeNotTokenOwner;
