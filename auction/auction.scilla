@@ -134,12 +134,37 @@ let min =
       | False => b
       end
 
-let compute_new_bid =
-  fun (bid_amount: Uint128) =>
-  fun (bid_increment: Uint128) =>
-    let subresult = builtin mul bid_amount bid_increment in
-      let increment = builtin div subresult one_hundred128 in
-        builtin add bid_amount increment
+let uint128_to_uint256 : Uint128 -> Uint256 =
+  fun (x : Uint128) =>
+    let ox256 = builtin to_uint256 x in
+      match ox256 with
+      | None =>
+        (* this never happens, hence we throw a division by zero exception just in case *)
+        let zero = Uint256 0 in
+        builtin div zero zero
+      | Some x256 => x256
+      end
+
+(* Compute "(x * y) / z" with protection against integer overflows *)
+let muldiv : Uint128 -> Uint128 -> Uint128 -> Uint128 =
+    fun (x : Uint128) =>
+    fun (y : Uint128) =>
+    fun (z : Uint128) =>
+      let x256 = uint128_to_uint256 x in
+      let y256 = uint128_to_uint256 y in
+      let z256 = uint128_to_uint256 z in
+      let x_mul_y256 = builtin mul x256 y256 in
+      let res256 = builtin div x_mul_y256 z256 in
+      let ores128 = builtin to_uint128 res256 in
+      match ores128 with
+      | None =>
+        (* this must never happen, hence we throw an integer overflow exception *)
+        let max_uint128 = Uint128 340282366920938463463374607431768211455 in
+        let fourtytwo128 = Uint128 42 in
+        builtin mul max_uint128 fourtytwo128
+      | Some res128 =>
+        res128
+      end
 
 
 (***************************************************)
@@ -324,7 +349,8 @@ end
 
 (* check if bid amount is higher than the next min bid *)
 procedure CheckBidAmount(bid: Uint128, highest_binding_bid: Uint128, bid_increment: Uint128)
-  min_bid = compute_new_bid highest_binding_bid bid_increment;
+  increment = muldiv highest_binding_bid bid_increment one_hundred128;
+  min_bid = builtin add highest_binding_bid increment;
   is_gte_current_highest = uint128_ge bid min_bid;
 
   match is_gte_current_highest with
@@ -621,7 +647,9 @@ transition PlaceBid(id: Uint256, amount: Uint128)
           (* no existings bids *)
           (* system auto adjust highest binding bid *)
           (* set the bidder as the highest bidder *)
-          new_highest_binding_bid = compute_new_bid highest_binding_bid bid_increment;
+          increment = muldiv highest_binding_bid bid_increment one_hundred128;
+          new_highest_binding_bid = builtin add highest_binding_bid increment;
+          
           new_highest_binding_bid = min new_highest_binding_bid new_bid;
           new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
           auctions[id] := new_auction;
@@ -635,7 +663,9 @@ transition PlaceBid(id: Uint256, amount: Uint128)
             (* increase the highestBindingBid and leave highestBidder alone. *)
             (* note that this case is impossible if _sender == highestBidder because you can never *)
             (* bid less DMZ than you've already bid. *)
-            new_highest_binding_bid = compute_new_bid new_bid bid_increment;
+            increment = muldiv new_bid bid_increment one_hundred128;
+            new_highest_binding_bid = builtin add new_bid increment;
+
             new_highest_binding_bid = min new_highest_binding_bid highest_bid;
             new_auction = Auction canceled new_highest_binding_bid highest_bidder owner_has_withdrawn static;
             auctions[id] := new_auction;
@@ -643,7 +673,9 @@ transition PlaceBid(id: Uint256, amount: Uint128)
           | False =>
             (* user has bid more than highest bid *)
             (* set user as the new highestBidder and recalculate highestBindingBid. *)
-            new_highest_binding_bid = compute_new_bid highest_bid bid_increment;
+            increment = muldiv highest_bid bid_increment one_hundred128;
+            new_highest_binding_bid = builtin add highest_bid increment;
+
             new_highest_binding_bid = min new_bid new_highest_binding_bid;
             new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
             auctions[id] := new_auction;
@@ -750,8 +782,7 @@ transition Withdraw(id: Uint256)
             (* winner to pay only highest binding bid, remainder to be refunded *)
             amount = option_uint128 zero128 some_bid_amount;
             extra = builtin sub amount highest_binding_bid;
-            com = builtin mul dev_commission highest_binding_bid;
-            com = builtin div com one_hundred128;
+            com = muldiv dev_commission highest_binding_bid one_hundred128;
             value = builtin sub highest_binding_bid com;
 
             delete funds_by_bidder[highest_bidder][id];
