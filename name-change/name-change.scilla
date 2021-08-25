@@ -1,5 +1,7 @@
 scilla_version 0
 
+import BoolUtils IntUtils
+
 library NameLib
 
 (* Error events *)
@@ -8,9 +10,13 @@ type Error =
 | CodeMinLVL
 | CodeNotTokenOwner
 | CodeNotFound
+| CodeInputOutOfRange
 
 let zero128 = Uint128 0
 let zero32 = Uint32 0
+let one_hundred32 = Uint32 100
+let one_hundred128 = Uint128 100
+let max_dmz = Uint128 16666660000000000000000000
 
 let option_value =
   tfun 'A =>
@@ -32,10 +38,11 @@ let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotOwner      => Int32 -1
-      | CodeMinLVL        => Int32 -2
-      | CodeNotTokenOwner => Int32 -3
-      | CodeNotFound      => Int32 -4
+      | CodeNotOwner         => Int32 -1
+      | CodeMinLVL           => Int32 -2
+      | CodeNotTokenOwner    => Int32 -3
+      | CodeNotFound         => Int32 -4
+      | CodeInputOutOfRange  => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
@@ -43,8 +50,8 @@ let make_error =
 contract NameContract
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  dmz: ByStr20,
+  init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_lvl: Map Uint256 Uint32,
     field token_owners: Map Uint256 ByStr20
@@ -52,8 +59,10 @@ contract NameContract
 )
 
 (* Mutable fields *)
-field min_lvl_for_change: Uint32 = Uint32 5000
-field price_for_change: Uint128 = Uint128 150000000000000000000
+field dmz: ByStr20 = init_dmz
+field wallet: ByStr20 = init_wallet
+field min_lvl_for_change: Uint32 = Uint32 5
+field price_for_change: Uint128 = Uint128 100000000000000000000
 
 procedure ThrowError(err : Error)
   e = make_error err;
@@ -100,9 +109,10 @@ procedure CallSetName(token_id: Uint256, new_name: String)
 end
 
 procedure CallTransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
+  dmz_o <- dmz;
   call_transfer_from = {
     _tag: "TransferFrom";
-    _recipient: dmz;
+    _recipient: dmz_o;
     _amount: Uint128 0;
     from: from;
     to: to;
@@ -110,6 +120,32 @@ procedure CallTransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
   };
   msgs = one_msg call_transfer_from;
   send msgs
+end
+
+procedure CheckNumRange(number: Uint32)
+  is_gte_zero = uint32_ge number zero32;
+  is_lte_hundred = uint32_le number one_hundred32;
+  is_within_range = andb is_gte_zero is_lte_hundred;
+
+  match is_within_range with
+  | True =>
+  | False =>
+    err = CodeInputOutOfRange;
+    ThrowError err
+  end
+end
+
+procedure CheckPriceRange(price: Uint128)
+  is_gte_zero = uint128_ge price zero128;
+  is_lte_max_dmz = uint128_le price max_dmz;
+  is_within_range = andb is_gte_zero is_lte_max_dmz;
+
+  match is_within_range with
+  | True =>
+  | False =>
+    err = CodeInputOutOfRange;
+    ThrowError err
+  end
 end
 
 transition SetName(token_id: Uint256, new_name: String)
@@ -123,7 +159,8 @@ transition SetName(token_id: Uint256, new_name: String)
 
   match can_change with
   | False =>
-    CallTransferFrom price _sender wallet;
+    wallet_o <- wallet;
+    CallTransferFrom price _sender wallet_o;
     CallSetName token_id new_name
   | True =>
     err = CodeMinLVL;
@@ -133,7 +170,7 @@ end
 
 transition ChangeMinLevel(value: Uint32)
   OnlyAdmin;
-
+  CheckNumRange value;
   min_lvl_for_change := value;
 
   e = {
@@ -145,13 +182,29 @@ end
 
 transition ChangePrice(value: Uint128)
   OnlyAdmin;
-
+  CheckPriceRange value;
   price_for_change := value;
 
   e = {
     _eventname: "PriceChanged";
     price_for_change: value
   };
+  event e
+end
+
+(* @dev Updates the dmz contract address; used only by contract owner *)
+transition UpdateDMZ(new_dmz: ByStr20)
+  OnlyAdmin;
+  dmz := new_dmz;
+  e = {_eventname: "UpdateDMZ"; new_dmz: new_dmz};
+  event e
+end
+
+(* @dev Updates the wallet contract address; used only by contract owner *)
+transition UpdateWallet(new_wallet: ByStr20)
+  OnlyAdmin;
+  wallet := new_wallet;
+  e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
   event e
 end
 

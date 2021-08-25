@@ -12,6 +12,23 @@ Contracts:
 
 # Deploy
 
+## Steps (WIP)
+1. Deploy ZRC2 dmz contract.
+1. Deploy ZRC1 demons contract.
+1. Deploy lvl up contract.
+1. Deploy name change contract.
+1. Invoke demons contract, `ConfigureMinter(lvl_up)` and `ConfigureMinter(name_change)`
+1. Deploy claim distributor. ?
+1. Deploy crowd sale. ?
+1. Deploy line crowd sale ?
+1. Deploy dummy marketplace contract.
+1. Deploy auctions contract, set the marketplace addr as the dummy one.
+1. Deploy marketplace contract.
+1. Update auctions contract, `UpdateDirectListing(marketplace)`.
+
+
+
+
 ### 1: [Deploy Main ZRC1 contract:](https://github.com/hicaru/demons-scilla/blob/master/ZRC1/nft-demons.scilla)
 
 Init:
