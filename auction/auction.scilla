@@ -24,6 +24,8 @@ type Error =
 | CodeAuctionNotApprovedToTransfer
 | CodeIncrementLessThanRequired
 | CodePriceLessThanRequired
+| CodePauseNotPause
+| CodeInputOutOfRange
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -38,6 +40,7 @@ type Operation =
   | Sub
 
 let zero_address = 0x0000000000000000000000000000000000000000
+let max_dmz = 16666660000000000000000000
 
 let zero256 = Uint256 0
 let zero128 = Uint128 0
@@ -50,6 +53,9 @@ let ff = False
 
 let add_operation = Add
 let sub_operation = Sub
+
+let not_pause = Uint32 0
+let on_pause = Uint32 1
 
 let one_msg = 
   fun (msg : Message) => 
@@ -83,7 +89,9 @@ let make_error =
       | CodeTokenListedInDirectSale      => Int32 -15
       | CodeAuctionNotApprovedToTransfer => Int32 -16
       | CodeIncrementLessThanRequired    => Int32 -17
-      | CodePriceLessThanRequired        => Int32 -18 
+      | CodePriceLessThanRequired        => Int32 -18
+      | CodePauseNotPause                => Int32 -19 
+      | CodeInputOutOfRange              => Int32 -20
       end
     in
     { _exception : "Error"; code : result_code }
@@ -195,6 +203,8 @@ end = init_marketplace
 
 field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128) 
   = Emp ByStr20 (Map Uint256 Uint128)
+
+field pause: Uint32 = not_pause
 
 field auctions: Map Uint256 Auction = Emp Uint256 Auction
 field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
@@ -388,6 +398,42 @@ procedure CheckDirectListing(token_id: Uint256)
   end
 end
 
+procedure CheckNumRange(number: Uint128)
+  is_gte_zero = uint128_ge number zero128;
+  is_lte_hundred = uint128_le number one_hundred128;
+  is_within_range = andb is_gte_zero is_lte_hundred;
+
+  match is_within_range with
+  | True =>
+  | False =>
+    err = CodeInputOutOfRange;
+    ThrowError err
+  end
+end
+
+procedure CheckPriceRange(price: Uint128)
+  is_gte_zero = uint128_ge price zero128;
+  is_lte_max_dmz = uint128_le price max_dmz;
+  is_within_range = andb is_gte_zero is_lte_max_dmz;
+
+  match is_within_range with
+  | True =>
+  | False =>
+    err = CodeInputOutOfRange;
+    ThrowError err
+  end
+end
+
+procedure CheckPause(expected: Uint32)
+  curent_pause <- pause;
+  is_eq = builtin eq expected curent_pause;
+  match is_eq with
+  | True =>
+  | False =>
+    err = CodePauseNotPause;
+    ThrowError err
+  end
+end
 
 procedure CheckStartBlock(start_block: BNum, end_block: BNum, current_block: BNum)
   is_incorect = blk_gte start_block end_block;
@@ -543,6 +589,7 @@ end
 (* @param end_block: Block number at which the auction should end *)
 (* @param token_id: Token/Card put up for listing *)
 transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
+  CheckPause not_pause;
   CheckApproved token_id;
   CheckDirectListing token_id;
   CheckTokenOwner token_id;
@@ -594,6 +641,7 @@ end
 (* If _sender has bidded before, then _sender has intention to raise his/her previous bid *)
 (* bid amount becomes the DIFFERENCE of _sender's previous bid and current bid *)
 transition PlaceBid(id: Uint256, amount: Uint128)
+  CheckPause not_pause;
   current_block <-& BLOCKNUMBER;
   some_current_bid <- funds_by_bidder[_sender][id];
   some_auction <- auctions[id];
@@ -693,6 +741,7 @@ end
 (* @dev Allows the owner to drop the auction listing if the auction has no bids and still within the time limit *)
 (* @param id: Auction id to cancel *)
 transition CancelAuction(id: Uint256)
+  CheckPause not_pause;
   current_block <-& BLOCKNUMBER;
   some_auction <- auctions[id];
 
@@ -748,6 +797,7 @@ end
 (* The auction listing here would definitely have at least one bid; because if the owner has cancelled it prior to end, the auction wouldn't exist *)
 (* @param id: Auction id to claim from *)
 transition Withdraw(id: Uint256)
+  CheckPause not_pause;
   current_block <-& BLOCKNUMBER;
   some_auction <- auctions[id];
   dev_commission <- commission;
@@ -821,6 +871,7 @@ end
 (* @param new_commission: New commision, e.g. if 10%, new_commission = 10 *)
 transition UpdateCommission(new_commission: Uint128)
   IsContractOwner;
+  CheckNumRange new_commission;
   old_com <- commission;
   commission := new_commission;
   e = {
@@ -858,6 +909,7 @@ end
 (* @dev Updates the min auction price required when users create an auction; used only by contract owner *)
 transition UpdateMinAuctionPrice(new_min_auction_price: Uint128)
   IsContractOwner;
+  CheckPriceRange new_min_auction_price;
   min_auction_price := new_min_auction_price;
   e = {_eventname: "UpdateMinAuctionPrice"; new_min_auction_price: new_min_auction_price};
   event e
@@ -866,6 +918,7 @@ end
 (* @dev Updates the min increment rate required when users create an auction; used only by contract owner *)
 transition UpdateMinIncrement(new_min_increment: Uint128)
   IsContractOwner;
+  CheckNumRange new_min_increment;
   min_increment := new_min_increment;
   e = {_eventname: "UpdateMinIncrement"; new_min_increment: new_min_increment};
   event e
