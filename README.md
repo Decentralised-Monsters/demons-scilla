@@ -18,7 +18,7 @@ Contracts:
 1. Add demon image URI in crowd sale contract, `AddReserveList(['image_uri_01', 'image_uri_02'])`
 1. Deploy lvl up contract.
 1. Deploy name change contract.
-1. Invoke demons contract, `ConfigureMinter(lvl_up)` and `ConfigureMinter(name_change)`
+1. Invoke demons contract, `ConfigureMinter(crowd_sale)`, `ConfigureMinter(lvl_up)` and `ConfigureMinter(name_change)`
 1. Deploy dummy marketplace contract.
 1. Deploy auctions contract, set the marketplace addr as the dummy one.
 1. Deploy marketplace contract.
