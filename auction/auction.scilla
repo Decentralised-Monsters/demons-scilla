@@ -24,6 +24,8 @@ type Error =
 | CodeAuctionNotApprovedToTransfer
 | CodeIncrementLessThanRequired
 | CodePriceLessThanRequired
+| CodePauseNotPause
+| CodeInputOutOfRange
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -38,6 +40,7 @@ type Operation =
   | Sub
 
 let zero_address = 0x0000000000000000000000000000000000000000
+let max_dmz = Uint128 16666660000000000000000000
 
 let zero256 = Uint256 0
 let zero128 = Uint128 0
@@ -50,6 +53,9 @@ let ff = False
 
 let add_operation = Add
 let sub_operation = Sub
+
+let not_pause = Uint32 0
+let on_pause = Uint32 1
 
 let one_msg = 
   fun (msg : Message) => 
@@ -83,7 +89,9 @@ let make_error =
       | CodeTokenListedInDirectSale      => Int32 -15
       | CodeAuctionNotApprovedToTransfer => Int32 -16
       | CodeIncrementLessThanRequired    => Int32 -17
-      | CodePriceLessThanRequired        => Int32 -18 
+      | CodePriceLessThanRequired        => Int32 -18
+      | CodePauseNotPause                => Int32 -19 
+      | CodeInputOutOfRange              => Int32 -20
       end
     in
     { _exception : "Error"; code : result_code }
@@ -134,12 +142,37 @@ let min =
       | False => b
       end
 
-let compute_new_bid =
-  fun (bid_amount: Uint128) =>
-  fun (bid_increment: Uint128) =>
-    let subresult = builtin mul bid_amount bid_increment in
-      let increment = builtin div subresult one_hundred128 in
-        builtin add bid_amount increment
+let uint128_to_uint256 : Uint128 -> Uint256 =
+  fun (x : Uint128) =>
+    let ox256 = builtin to_uint256 x in
+      match ox256 with
+      | None =>
+        (* this never happens, hence we throw a division by zero exception just in case *)
+        let zero = Uint256 0 in
+        builtin div zero zero
+      | Some x256 => x256
+      end
+
+(* Compute "(x * y) / z" with protection against integer overflows *)
+let muldiv : Uint128 -> Uint128 -> Uint128 -> Uint128 =
+    fun (x : Uint128) =>
+    fun (y : Uint128) =>
+    fun (z : Uint128) =>
+      let x256 = uint128_to_uint256 x in
+      let y256 = uint128_to_uint256 y in
+      let z256 = uint128_to_uint256 z in
+      let x_mul_y256 = builtin mul x256 y256 in
+      let res256 = builtin div x_mul_y256 z256 in
+      let ores128 = builtin to_uint128 res256 in
+      match ores128 with
+      | None =>
+        (* this must never happen, hence we throw an integer overflow exception *)
+        let max_uint128 = Uint128 340282366920938463463374607431768211455 in
+        let fourtytwo128 = Uint128 42 in
+        builtin mul max_uint128 fourtytwo128
+      | Some res128 =>
+        res128
+      end
 
 
 (***************************************************)
@@ -171,12 +204,14 @@ end = init_marketplace
 field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128) 
   = Emp ByStr20 (Map Uint256 Uint128)
 
+field pause: Uint32 = not_pause
+
 field auctions: Map Uint256 Auction = Emp Uint256 Auction
 field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
 (* token_id to auction_id mapping for quick check if card is already up for auction *)
 field token_auctions: Map Uint256 Uint256 = Emp Uint256 Uint256
 field total: Uint256 = zero256
-field commission: Uint128 = Uint128 10
+field commission: Uint128 = Uint128 5
 (* min bid increment in percentage *)
 field min_increment: Uint128 = Uint128 5
 (* min price to sell; 1 DMZ *)
@@ -324,7 +359,8 @@ end
 
 (* check if bid amount is higher than the next min bid *)
 procedure CheckBidAmount(bid: Uint128, highest_binding_bid: Uint128, bid_increment: Uint128)
-  min_bid = compute_new_bid highest_binding_bid bid_increment;
+  increment = muldiv highest_binding_bid bid_increment one_hundred128;
+  min_bid = builtin add highest_binding_bid increment;
   is_gte_current_highest = uint128_ge bid min_bid;
 
   match is_gte_current_highest with
@@ -362,6 +398,42 @@ procedure CheckDirectListing(token_id: Uint256)
   end
 end
 
+procedure CheckNumRange(number: Uint128)
+  is_gte_zero = uint128_ge number zero128;
+  is_lte_hundred = uint128_le number one_hundred128;
+  is_within_range = andb is_gte_zero is_lte_hundred;
+
+  match is_within_range with
+  | True =>
+  | False =>
+    err = CodeInputOutOfRange;
+    ThrowError err
+  end
+end
+
+procedure CheckPriceRange(price: Uint128)
+  is_gte_zero = uint128_ge price zero128;
+  is_lte_max_dmz = uint128_le price max_dmz;
+  is_within_range = andb is_gte_zero is_lte_max_dmz;
+
+  match is_within_range with
+  | True =>
+  | False =>
+    err = CodeInputOutOfRange;
+    ThrowError err
+  end
+end
+
+procedure CheckPause(expected: Uint32)
+  curent_pause <- pause;
+  is_eq = builtin eq expected curent_pause;
+  match is_eq with
+  | True =>
+  | False =>
+    err = CodePauseNotPause;
+    ThrowError err
+  end
+end
 
 procedure CheckStartBlock(start_block: BNum, end_block: BNum, current_block: BNum)
   is_incorect = blk_gte start_block end_block;
@@ -379,8 +451,8 @@ end
 
 procedure CheckTokenOwner(token_id: Uint256)
   some_token_owner <-& main.token_owners[token_id];
-  dragon_owner = option_address zero_address some_token_owner;
-  is_address_call = builtin eq _sender dragon_owner;
+  token_owner = option_address zero_address some_token_owner;
+  is_address_call = builtin eq _sender token_owner;
   match is_address_call with
   | False =>
     err = CodeNotTokenOwner;
@@ -517,18 +589,18 @@ end
 (* @param end_block: Block number at which the auction should end *)
 (* @param token_id: Token/Card put up for listing *)
 transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
+  current_block <-& BLOCKNUMBER;
+  CheckStartBlock start_block end_block current_block;  
+  CheckPause not_pause;
   CheckApproved token_id;
   CheckDirectListing token_id;
   CheckTokenOwner token_id;
   CheckBidIncrement bid_increment;
   CheckAuctionPrice min_price;
 
-  current_block <-& BLOCKNUMBER;
   total_ids <- total;
   auction_id <- token_auctions[token_id];
 
-  CheckStartBlock start_block end_block current_block;
-  
   match auction_id with
   | Some auction =>
     (* card has already been placed on auction *)
@@ -568,6 +640,7 @@ end
 (* If _sender has bidded before, then _sender has intention to raise his/her previous bid *)
 (* bid amount becomes the DIFFERENCE of _sender's previous bid and current bid *)
 transition PlaceBid(id: Uint256, amount: Uint128)
+  CheckPause not_pause;
   current_block <-& BLOCKNUMBER;
   some_current_bid <- funds_by_bidder[_sender][id];
   some_auction <- auctions[id];
@@ -621,7 +694,9 @@ transition PlaceBid(id: Uint256, amount: Uint128)
           (* no existings bids *)
           (* system auto adjust highest binding bid *)
           (* set the bidder as the highest bidder *)
-          new_highest_binding_bid = compute_new_bid highest_binding_bid bid_increment;
+          increment = muldiv highest_binding_bid bid_increment one_hundred128;
+          new_highest_binding_bid = builtin add highest_binding_bid increment;
+          
           new_highest_binding_bid = min new_highest_binding_bid new_bid;
           new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
           auctions[id] := new_auction;
@@ -635,7 +710,9 @@ transition PlaceBid(id: Uint256, amount: Uint128)
             (* increase the highestBindingBid and leave highestBidder alone. *)
             (* note that this case is impossible if _sender == highestBidder because you can never *)
             (* bid less DMZ than you've already bid. *)
-            new_highest_binding_bid = compute_new_bid new_bid bid_increment;
+            increment = muldiv new_bid bid_increment one_hundred128;
+            new_highest_binding_bid = builtin add new_bid increment;
+
             new_highest_binding_bid = min new_highest_binding_bid highest_bid;
             new_auction = Auction canceled new_highest_binding_bid highest_bidder owner_has_withdrawn static;
             auctions[id] := new_auction;
@@ -643,7 +720,9 @@ transition PlaceBid(id: Uint256, amount: Uint128)
           | False =>
             (* user has bid more than highest bid *)
             (* set user as the new highestBidder and recalculate highestBindingBid. *)
-            new_highest_binding_bid = compute_new_bid highest_bid bid_increment;
+            increment = muldiv highest_bid bid_increment one_hundred128;
+            new_highest_binding_bid = builtin add highest_bid increment;
+
             new_highest_binding_bid = min new_bid new_highest_binding_bid;
             new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
             auctions[id] := new_auction;
@@ -661,6 +740,7 @@ end
 (* @dev Allows the owner to drop the auction listing if the auction has no bids and still within the time limit *)
 (* @param id: Auction id to cancel *)
 transition CancelAuction(id: Uint256)
+  CheckPause not_pause;
   current_block <-& BLOCKNUMBER;
   some_auction <- auctions[id];
 
@@ -716,6 +796,7 @@ end
 (* The auction listing here would definitely have at least one bid; because if the owner has cancelled it prior to end, the auction wouldn't exist *)
 (* @param id: Auction id to claim from *)
 transition Withdraw(id: Uint256)
+  CheckPause not_pause;
   current_block <-& BLOCKNUMBER;
   some_auction <- auctions[id];
   dev_commission <- commission;
@@ -750,8 +831,7 @@ transition Withdraw(id: Uint256)
             (* winner to pay only highest binding bid, remainder to be refunded *)
             amount = option_uint128 zero128 some_bid_amount;
             extra = builtin sub amount highest_binding_bid;
-            com = builtin mul dev_commission highest_binding_bid;
-            com = builtin div com one_hundred128;
+            com = muldiv dev_commission highest_binding_bid one_hundred128;
             value = builtin sub highest_binding_bid com;
 
             delete funds_by_bidder[highest_bidder][id];
@@ -790,6 +870,7 @@ end
 (* @param new_commission: New commision, e.g. if 10%, new_commission = 10 *)
 transition UpdateCommission(new_commission: Uint128)
   IsContractOwner;
+  CheckNumRange new_commission;
   old_com <- commission;
   commission := new_commission;
   e = {
@@ -827,6 +908,7 @@ end
 (* @dev Updates the min auction price required when users create an auction; used only by contract owner *)
 transition UpdateMinAuctionPrice(new_min_auction_price: Uint128)
   IsContractOwner;
+  CheckPriceRange new_min_auction_price;
   min_auction_price := new_min_auction_price;
   e = {_eventname: "UpdateMinAuctionPrice"; new_min_auction_price: new_min_auction_price};
   event e
@@ -835,8 +917,25 @@ end
 (* @dev Updates the min increment rate required when users create an auction; used only by contract owner *)
 transition UpdateMinIncrement(new_min_increment: Uint128)
   IsContractOwner;
+  CheckNumRange new_min_increment;
   min_increment := new_min_increment;
   e = {_eventname: "UpdateMinIncrement"; new_min_increment: new_min_increment};
+  event e
+end
+
+(* @dev Pause or unpause the marketplace; used only by contract owner *)
+transition UpdatePause()
+  IsContractOwner;
+  status <- pause;
+  is_pause = builtin eq status on_pause;
+  match is_pause with
+  | True =>
+    pause := not_pause
+  | False =>
+    pause := on_pause
+  end;
+  updated_pause <- pause;
+  e = {_eventname : "UpdatePause"; pause: updated_pause};
   event e
 end
 

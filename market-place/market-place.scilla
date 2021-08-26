@@ -3,7 +3,7 @@ scilla_version 0
 (***************************************************)
 (*               Associated library                *)
 (***************************************************)
-import IntUtils
+import BoolUtils IntUtils
 
 library MarketPlace
 
@@ -31,6 +31,38 @@ let option_value =
 
 let option_address = @option_value ByStr20
 
+let uint128_to_uint256 : Uint128 -> Uint256 =
+  fun (x : Uint128) =>
+    let ox256 = builtin to_uint256 x in
+      match ox256 with
+      | None =>
+        (* this never happens, hence we throw a division by zero exception just in case *)
+        let zero = Uint256 0 in
+        builtin div zero zero
+      | Some x256 => x256
+      end
+
+(* Compute "(x * y) / z" with protection against integer overflows *)
+let muldiv : Uint128 -> Uint128 -> Uint128 -> Uint128 =
+    fun (x : Uint128) =>
+    fun (y : Uint128) =>
+    fun (z : Uint128) =>
+      let x256 = uint128_to_uint256 x in
+      let y256 = uint128_to_uint256 y in
+      let z256 = uint128_to_uint256 z in
+      let x_mul_y256 = builtin mul x256 y256 in
+      let res256 = builtin div x_mul_y256 z256 in
+      let ores128 = builtin to_uint128 res256 in
+      match ores128 with
+      | None =>
+        (* this must never happen, hence we throw an integer overflow exception *)
+        let max_uint128 = Uint128 340282366920938463463374607431768211455 in
+        let fourtytwo128 = Uint128 42 in
+        builtin mul max_uint128 fourtytwo128
+      | Some res128 =>
+        res128
+      end
+
 (*ByStr20 - Address of owner*)
 (*Uint128 - Price*)
 (*Uint256 - tokenID*)
@@ -47,6 +79,7 @@ type Error =
   | CodePauseNotPause
   | CodeTokenListedInAuction
   | CodeTokenAlreadyListed
+  | CodeCommissionOutOfRange
 
 let make_error =
   fun (result : Error) =>
@@ -59,6 +92,7 @@ let make_error =
       | CodePauseNotPause            => Int32 -5
       | CodeTokenListedInAuction     => Int32 -6
       | CodeTokenAlreadyListed       => Int32 -7
+      | CodeCommissionOutOfRange     => Int32 -8
       end
     in
     { _exception : "Error"; code : result_code }
@@ -96,8 +130,8 @@ field orderbook : Map Uint256 Order
                   = Emp Uint256 Order
 (* token_id to order_id mapping for quick check if card is already on sale *)
 field token_orderbook : Map Uint256 Uint256 = Emp Uint256 Uint256 
-(* Fee taken from each purchase, 10% *)
-field commission: Uint128 = Uint128 10
+(* Fee taken from each purchase, 5% *)
+field commission: Uint128 = Uint128 5
 
 (* Procedures *)
 procedure ThrowError(err : Error)
@@ -114,6 +148,20 @@ procedure CheckApproved(token_id: Uint256)
   | True =>
   | False =>
     err = CodeMPNotApprovedToTransfer;
+    ThrowError err
+  end
+end
+
+(* check commission is between 0 to 100% *)
+procedure CheckCommission(new_commission: Uint128)
+  is_gte_zero = uint128_ge new_commission zero128;
+  is_lte_hundred = uint128_le new_commission one_hundred128;
+  is_within_range = andb is_gte_zero is_lte_hundred;
+
+  match is_within_range with
+  | True =>
+  | False =>
+    err = CodeCommissionOutOfRange;
     ThrowError err
   end
 end
@@ -182,6 +230,7 @@ procedure CancelOrder(cancel_order_id: Uint256)
   match listing with
   | Some (Order owner price token_id item_order_id) =>
     delete orderbook[item_order_id];
+    delete token_orderbook[token_id];
     e = {
       _eventname: "OrderCancelled";
       item_order_id: item_order_id
@@ -261,8 +310,7 @@ transition Purchase(purchase_order_id: Uint256)
   | Some (Order owner price token_id item_order_id) =>  
       (* amount is correct go ahead and remove order and transfer Dragon plus funds*)
       (* remove fee from the purchase amount*)
-      com = builtin mul price current_commission;
-      fees = builtin div com one_hundred128;
+      fees = muldiv price current_commission one_hundred128;
       sellers_amount = builtin sub price fees;
 
       wallet_o <- wallet;
@@ -294,6 +342,7 @@ end
 (* Cancel listing, remove it, and transfer Dragon back to owner*) 
 (* Only performed by owner of listing*)
 transition CancelListing(cancel_order_id : Uint256)
+  CheckPause not_pause;
   listing <- orderbook[cancel_order_id];
   match listing with
   | Some (Order owner price token_id item_order_id) =>  
@@ -332,6 +381,7 @@ end
 (* @param new_commission: New commision, e.g. if 10%, new_commission = 10 *)
 transition UpdateCommission(new_commission: Uint128)
   IsContractOwner;
+  CheckCommission new_commission;
   old_com <- commission;
   commission := new_commission;
   e = {
