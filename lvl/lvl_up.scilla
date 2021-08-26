@@ -81,6 +81,7 @@ contract LVLUpContract
   contract_owner: ByStr20,
   init_wallet: ByStr20,
   init_dmz: ByStr20,
+  init_distributor: ByStr20,
   main: ByStr20 with contract
     field token_lvl: Map Uint256 Uint32
   end
@@ -89,7 +90,9 @@ contract LVLUpContract
 (* Mutable fields *)
 field dmz: ByStr20 = init_dmz
 field wallet: ByStr20 = init_wallet
+field distributor: ByStr20 = init_distributor
 field max_lvl: Uint32 = Uint32 5
+field min_lvl_for_earn_reward: Uint32 = Uint32 2
 field fee_multiplier: Uint32 = Uint32 100
 
 (**************************************)
@@ -110,6 +113,26 @@ procedure IsOwner()
     ThrowError err
   end
 end
+
+procedure CallBeginReward(new_lvl: Uint32, token_id: Uint256)
+  min_lvl <- min_lvl_for_earn_reward;
+  can_begin_reward = builtin eq min_lvl new_lvl;
+  
+  match can_begin_reward with
+  | True =>
+    distributor_o <- distributor;
+    msg_transfer = {
+      _tag: "OnBeginReward";
+      _recipient: distributor_o;
+      _amount: zero128;
+      token_id: token_id
+    };
+    msgs = one_msg msg_transfer;
+    send msgs
+  | False =>
+  end
+end
+
 
 procedure CallUpgrade(new_lvl: Uint32, token_id: Uint256)
   msg_transfer = {
@@ -175,6 +198,7 @@ transition Upgrade(fee: Uint128, token_id: Uint256)
       CheckLvlUpFee computed_fee fee;
       CallTransferFrom computed_fee _sender wallet_o;
       CallUpgrade new_lvl token_id;
+      CallBeginReward new_lvl token_id;
 
       e = {
         _eventname: "Upgrade";
@@ -216,6 +240,19 @@ transition SetFeeMultiplier(new_multiplier: Uint32)
   event e
 end
 
+(* @dev Sets the minimum level to unlock earn rewards. Used only by contract owner. *)
+transition SetMinLvlReward(new_min_lvl: Uint32)
+  IsOwner;
+  existing_min_lvl <- min_lvl_for_earn_reward;
+  min_lvl_for_earn_reward := new_min_lvl;
+  e = {
+    _eventname: "SetMinLvlReward";
+    existing_min_lvl: existing_min_lvl;
+    new_min_lvl: new_min_lvl
+  };
+  event e
+end
+
 (* @dev Updates the dmz contract address; used only by contract owner *)
 transition UpdateDMZ(new_dmz: ByStr20)
   IsOwner;
@@ -229,6 +266,14 @@ transition UpdateWallet(new_wallet: ByStr20)
   IsOwner;
   wallet := new_wallet;
   e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
+  event e
+end
+
+(* @dev Updates the distributor address; used only by contract owner *)
+transition UpdateDistributor(new_distributor: ByStr20)
+  IsOwner;
+  distributor := new_distributor;
+  e = {_eventname: "UpdateDistributor"; new_distributor: new_distributor};
   event e
 end
 
