@@ -11,7 +11,7 @@ async function main() {
 
     if (myArgs.length < 4) {
         console.error("Wrong arguments\n");
-        console.log("node mint-demon.js [private_key] [0x_demon_addr] [0x_recipient_addr] [imageURI]");
+        console.log("node mint-demon-direct.js [private_key] [0x_demon_addr] [0x_recipient_addr] [imageURI]");
         return;
     }
 
