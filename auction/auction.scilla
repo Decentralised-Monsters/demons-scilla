@@ -451,8 +451,8 @@ end
 
 procedure CheckTokenOwner(token_id: Uint256)
   some_token_owner <-& main.token_owners[token_id];
-  dragon_owner = option_address zero_address some_token_owner;
-  is_address_call = builtin eq _sender dragon_owner;
+  token_owner = option_address zero_address some_token_owner;
+  is_address_call = builtin eq _sender token_owner;
   match is_address_call with
   | False =>
     err = CodeNotTokenOwner;
@@ -589,6 +589,8 @@ end
 (* @param end_block: Block number at which the auction should end *)
 (* @param token_id: Token/Card put up for listing *)
 transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block: BNum, end_block: BNum, token_id: Uint256)
+  current_block <-& BLOCKNUMBER;
+  CheckStartBlock start_block end_block current_block;  
   CheckPause not_pause;
   CheckApproved token_id;
   CheckDirectListing token_id;
@@ -596,12 +598,9 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
   CheckBidIncrement bid_increment;
   CheckAuctionPrice min_price;
 
-  current_block <-& BLOCKNUMBER;
   total_ids <- total;
   auction_id <- token_auctions[token_id];
 
-  CheckStartBlock start_block end_block current_block;
-  
   match auction_id with
   | Some auction =>
     (* card has already been placed on auction *)
@@ -921,6 +920,22 @@ transition UpdateMinIncrement(new_min_increment: Uint128)
   CheckNumRange new_min_increment;
   min_increment := new_min_increment;
   e = {_eventname: "UpdateMinIncrement"; new_min_increment: new_min_increment};
+  event e
+end
+
+(* @dev Pause or unpause the marketplace; used only by contract owner *)
+transition UpdatePause()
+  IsContractOwner;
+  status <- pause;
+  is_pause = builtin eq status on_pause;
+  match is_pause with
+  | True =>
+    pause := not_pause
+  | False =>
+    pause := on_pause
+  end;
+  updated_pause <- pause;
+  e = {_eventname : "UpdatePause"; pause: updated_pause};
   event e
 end
 
