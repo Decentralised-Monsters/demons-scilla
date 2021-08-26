@@ -15,15 +15,17 @@ Contracts:
 1. Deploy ZRC1 demons contract.
 1. Deploy claim distributor contract.
 1. Deploy crowd sale (line variant) contract.
-1. Update claim distributor - crowd sale address `SetCrowdSale(crowd_sale_addr)`
-1. Add demon image URI in crowd sale contract, `AddReserveList(['image_uri_666', 'image_uri_665', '664'])` in **reverse order**
 1. Deploy lvl up contract.
 1. Deploy name change contract.
-1. Invoke demons contract, `ConfigureMinter(crowd_sale)`, `ConfigureMinter(lvl_up)` and `ConfigureMinter(name_change)`
 1. Deploy dummy marketplace contract.
 1. Deploy auctions contract, set the marketplace addr as the dummy one.
 1. Deploy marketplace contract.
 1. Update auctions contract, `UpdateDirectListing(marketplace)`.
+
+## Post Deployment
+1. Update claim distributor - lvl up address `SetCrowdSale(crowd_sale_addr)`
+1. Add demon image URI in crowd sale contract, `AddReserveList(['image_uri_666', 'image_uri_665', '664'])` in **reverse order**
+1. 1. Invoke demons contract, `ConfigureMinter(crowd_sale)`, `ConfigureMinter(lvl_up)` and `ConfigureMinter(name_change)`
 
 ## Maintenance
 1. Transfer some DMZ periodically to claim distributor contract for the claim rewards.
