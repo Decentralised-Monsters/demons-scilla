@@ -3,7 +3,7 @@ scilla_version 0
 (***************************************************)
 (*               Associated library                *)
 (***************************************************)
-import ListUtils
+import BoolUtils IntUtils ListUtils
 
 library DMZClaimLib
 
@@ -14,11 +14,15 @@ type Error =
   | CodeNotCrowdSale
   | CodeTokenHolderAlreadyExists
   | CodeNotTokenOwner
+  | CodeInputOutOfRange
+  | CodeMinLvl
 
 let zero256 = Uint256 0
 let zero128 = Uint128 0
+let zero32 = Uint32 0
 let zeroBN = BNum 0
 let zero_address = 0x0000000000000000000000000000000000000000
+let one_hundred32 = Uint32 100
 
 let one_msg = 
   fun (msg: Message) => 
@@ -34,6 +38,8 @@ let make_error =
       | CodeNotCrowdSale                 => Int32 -3
       | CodeTokenHolderAlreadyExists     => Int32 -4
       | CodeNotTokenOwner                => Int32 -5
+      | CodeInputOutOfRange              => Int32 -6
+      | CodeMinLvl                       => Int32 -7
       end
     in
     { _exception : "Error"; code : result_code }
@@ -48,6 +54,7 @@ let option_value =
     end
 
 let option_uint128 = @option_value Uint128
+let option_uint32 = @option_value Uint32
 
 let get_claim_value =
   fun (current_block: Int256) =>
@@ -68,12 +75,14 @@ contract DMZClaimContract
   contract_owner: ByStr20,
   init_dmz: ByStr20,
   main: ByStr20 with contract
+    field token_lvl: Map Uint256 Uint32,
     field token_owners: Map Uint256 ByStr20
   end
 )
 
 (* Mutable fields *)
 field dmz: ByStr20 = init_dmz
+field min_lvl_for_claim: Uint32 = Uint32 2
 
 (* Total token count *)
 field blocks_for_rewards: BNum = BNum 2160
@@ -86,6 +95,34 @@ field crowd_sale: ByStr20 = zero_address
 procedure ThrowError(err : Error)
   e = make_error err;
   throw e
+end
+
+procedure CheckMinLevel(token_id: Uint256)
+  min_lvl <- min_lvl_for_claim;
+  some_lvl <-& main.token_lvl[token_id];
+  lvl = option_uint32 zero32 some_lvl;
+  is_lt_min_lvl = builtin lt lvl min_lvl;
+
+  match is_lt_min_lvl with
+  | True =>
+    err = CodeMinLvl;
+    ThrowError err
+  | False =>
+  end
+end
+
+
+procedure CheckNumRange(number: Uint32)
+  is_gte_zero = uint32_ge number zero32;
+  is_lte_hundred = uint32_le number one_hundred32;
+  is_within_range = andb is_gte_zero is_lte_hundred;
+
+  match is_within_range with
+  | True =>
+  | False =>
+    err = CodeInputOutOfRange;
+    ThrowError err
+  end
 end
 
 procedure OnlyAdmin()
@@ -168,6 +205,7 @@ end
 
 transition Claim(token_id: Uint256)
   OnlyTokenOwner token_id;
+  CheckMinLevel token_id;
 
   current_block <-& BLOCKNUMBER;
   rewards_amount <- rewards;
@@ -209,6 +247,18 @@ transition SetRewards(blocks: BNum, rewards_amount: Uint128)
     _eventname: "RewardsChangedSuccess";
     blocks: blocks;
     rewards: rewards_amount
+  };
+  event e
+end
+
+transition ChangeMinLevel(value: Uint32)
+  OnlyAdmin;
+  CheckNumRange value;
+  min_lvl_for_claim := value;
+
+  e = {
+    _eventname: "MinLevelChanged";
+    min_lvl_for_claim: value
   };
   event e
 end
