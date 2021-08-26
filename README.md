@@ -15,6 +15,7 @@ Contracts:
 1. Deploy ZRC1 demons contract.
 1. Deploy claim distributor contract.
 1. Deploy crowd sale (bonding curve) contract.
+1. Update claim distributor - crowd sale address `SetCrowdSale(crowd_sale_addr)`
 1. Add demon image URI in crowd sale contract, `AddReserveList(['image_uri_01', 'image_uri_02'])`
 1. Deploy lvl up contract.
 1. Deploy name change contract.
