@@ -82,35 +82,19 @@ contract DMZClaimContract
 
 (* Mutable fields *)
 field dmz: ByStr20 = init_dmz
-field min_lvl_for_claim: Uint32 = Uint32 2
 
 (* Total token count *)
 field blocks_for_rewards: BNum = BNum 2160
 field rewards: Uint128 = Uint128 191203703703703
 field token_holder: Map Uint256 Int256 = Emp Uint256 Int256
 
-field crowd_sale: ByStr20 = zero_address
+field lvl_up: ByStr20 = zero_address
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
   e = make_error err;
   throw e
 end
-
-procedure CheckMinLevel(token_id: Uint256)
-  min_lvl <- min_lvl_for_claim;
-  some_lvl <-& main.token_lvl[token_id];
-  lvl = option_uint32 zero32 some_lvl;
-  is_lt_min_lvl = builtin lt lvl min_lvl;
-
-  match is_lt_min_lvl with
-  | True =>
-    err = CodeMinLvl;
-    ThrowError err
-  | False =>
-  end
-end
-
 
 procedure CheckNumRange(number: Uint32)
   is_gte_zero = uint32_ge number zero32;
@@ -136,11 +120,11 @@ procedure OnlyAdmin()
   end
 end
 
-procedure OnlyCrowdSale()
-  address_crowd_sale <- crowd_sale;
-  is_crowd_sale = builtin eq _sender address_crowd_sale;
+procedure OnlyLvlUp()
+  address_lvlup <- lvl_up;
+  is_lvl_up = builtin eq _sender address_lvlup;
 
-  match is_crowd_sale with
+  match is_lvl_up with
   | True =>
   | False =>
     err = CodeNotCrowdSale;
@@ -193,19 +177,17 @@ end
 
 
 transition OnBeginReward(token_id: Uint256)
-  OnlyCrowdSale;
+  OnlyLvlUp;
   OnlyTokenHolderNotExists token_id;
 
   current_block <-& BLOCKNUMBER;
-  blocks_amount <- blocks_for_rewards;
-
-  new_holder = builtin bsub current_block blocks_amount;
-  token_holder[token_id] := new_holder
+  block_number = builtin bsub current_block zeroBN;
+  token_holder[token_id] := block_number
 end
+
 
 transition Claim(token_id: Uint256)
   OnlyTokenOwner token_id;
-  CheckMinLevel token_id;
 
   current_block <-& BLOCKNUMBER;
   rewards_amount <- rewards;
@@ -225,13 +207,13 @@ transition Claim(token_id: Uint256)
 end
 
 
-transition SetCrowdSale(address: ByStr20)
+transition SetLvlUp(address: ByStr20)
   OnlyAdmin;
 
-  crowd_sale := address;
+  lvl_up := address;
 
   e = {
-    _eventname: "CrowdSaleChangedSuccess";
+    _eventname: "LvlupChangedSuccess";
     address: address
   };
   event e
@@ -247,18 +229,6 @@ transition SetRewards(blocks: BNum, rewards_amount: Uint128)
     _eventname: "RewardsChangedSuccess";
     blocks: blocks;
     rewards: rewards_amount
-  };
-  event e
-end
-
-transition ChangeMinLevel(value: Uint32)
-  OnlyAdmin;
-  CheckNumRange value;
-  min_lvl_for_claim := value;
-
-  e = {
-    _eventname: "MinLevelChanged";
-    min_lvl_for_claim: value
   };
   event e
 end

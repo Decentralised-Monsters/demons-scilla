@@ -9,17 +9,19 @@ const fs = require('fs');
 async function main() {
     const myArgs = process.argv.slice(2);
 
-    if (myArgs.length < 3) {
+    if (myArgs.length < 4) {
         console.error("Wrong arguments");
-        console.log("node deploy-levelup.js [private_key] [0x_dmz_addr] [0x_demon_addr]");
+        console.log("node deploy-levelup.js [private_key] [0x_dmz_addr] [0x_distributor_addr] [0x_demon_addr]");
         return;
     }
 
     const privateKey = myArgs[0];
     const dmz = myArgs[1];
-    const demon = myArgs[2];
+    const distributor = myArgs[2]
+    const demon = myArgs[3];
 
     console.log("dmz: ", dmz);
+    console.log("distributor: ", distributor);
     console.log("demon: ", demon);
 
     const zilliqa = new Zilliqa('https://dev-api.zilliqa.com');
@@ -55,6 +57,11 @@ async function main() {
                 vname: 'init_dmz',
                 type: 'ByStr20',
                 value: `${dmz}`,
+            },
+            {
+                vname: 'init_distributor',
+                type: 'ByStr20',
+                value: `${distributor}`,
             },
             {
                 vname: 'main',
