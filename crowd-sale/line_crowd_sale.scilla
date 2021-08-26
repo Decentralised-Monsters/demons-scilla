@@ -93,7 +93,7 @@ field total: Uint256 = zero256
 
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
 field decimal: Uint256 = Uint256 26
-field price: Uint256 = Uint256 4000000000000000
+field price: Uint256 = Uint256 3000000000000000
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
