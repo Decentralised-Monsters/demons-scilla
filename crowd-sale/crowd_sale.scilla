@@ -111,14 +111,16 @@ let change_of_coins =
 contract BondingCurvedDistributor
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  distributor: ByStr20,
+  init_wallet: ByStr20,
+  init_distributor: ByStr20,
   main: ByStr20 with contract
     field token_id_count: Uint256
   end
 )
 
 (* Mutable fields *)
+field wallet: ByStr20 = init_wallet
+field distributor: ByStr20 = init_distributor
 
 (* Total token count *)
 field reserve: Uint256 = zero256
@@ -195,9 +197,10 @@ procedure Minting(to: ByStr20)
 end
 
 procedure CallBought(token_id: Uint256)
+  distributor_o <- distributor;
   msg_to_distributor = {
-    _tag: "OnBoughtMask";
-    _recipient: distributor;
+    _tag: "OnBeginReward";
+    _recipient: distributor_o;
     _amount: Uint128 0;
     token_id: token_id
   };
@@ -244,8 +247,22 @@ end
 
 transition TransferZilsToWallet()
   bal <- _balance;
+  wallet_o <- wallet;
+  AddFunds wallet_o bal
+end
 
-  AddFunds wallet bal
+transition UpdateWallet(new_wallet: ByStr20)
+  IsContractOwner;
+  wallet := new_wallet;
+  e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
+  event e
+end
+
+transition UpdateDistributor(new_distributor: ByStr20)
+  IsContractOwner;
+  distributor := new_distributor;
+  e = {_eventname: "UpdateDistributor"; new_distributor: new_distributor};
+  event e
 end
 
 (* callbacks *)
@@ -257,4 +274,4 @@ transition MintCallBack(recipient: ByStr20, token_id: Uint256, token_uri: String
   CallBought token_id;
   total := new_count
 end
-(* callbacks *)
+

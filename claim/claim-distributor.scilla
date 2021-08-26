@@ -12,7 +12,7 @@ type Error =
   | CodeNotContractOwner
   | CodeNotFound
   | CodeNotCrowdSale
-  | CodeAlreadyExists
+  | CodeTokenHolderAlreadyExists
   | CodeNotTokenOwner
 
 let zero256 = Uint256 0
@@ -29,11 +29,11 @@ let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotContractOwner  => Int32 -1
-      | CodeNotFound          => Int32 -2
-      | CodeNotCrowdSale      => Int32 -3
-      | CodeAlreadyExists     => Int32 -4
-      | CodeNotTokenOwner     => Int32 -5
+      | CodeNotContractOwner             => Int32 -1
+      | CodeNotFound                     => Int32 -2
+      | CodeNotCrowdSale                 => Int32 -3
+      | CodeTokenHolderAlreadyExists     => Int32 -4
+      | CodeNotTokenOwner                => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
@@ -66,17 +66,18 @@ let get_claim_value =
 contract DMZClaimContract
 (
   contract_owner: ByStr20,
-  dmz: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_owners: Map Uint256 ByStr20
   end
 )
 
 (* Mutable fields *)
+field dmz: ByStr20 = init_dmz
 
 (* Total token count *)
-field blocks_for_rewards: BNum = BNum 5000
-field rewards: Uint128 = Uint128 4000000000000000
+field blocks_for_rewards: BNum = BNum 2160
+field rewards: Uint128 = Uint128 191203703703703
 field token_holder: Map Uint256 Int256 = Emp Uint256 Int256
 
 field crowd_sale: ByStr20 = zero_address
@@ -110,13 +111,13 @@ procedure OnlyCrowdSale()
   end
 end
 
-procedure OnlyNotExists(token_id: Uint256)
+procedure OnlyTokenHolderNotExists(token_id: Uint256)
   is_already <- exists token_holder[token_id];
 
   match is_already with
   | False =>
   | True =>
-    err = CodeAlreadyExists;
+    err = CodeTokenHolderAlreadyExists;
     ThrowError err
   end
 end
@@ -141,9 +142,10 @@ procedure OnlyTokenOwner(token_id: Uint256)
 end
 
 procedure CallTransfer(to: ByStr20, amount: Uint128)
+  dmz_o <- dmz;
   msg_transfer = {
     _tag: "Transfer";
-    _recipient: dmz;
+    _recipient: dmz_o;
     _amount: zero128;
     to: to;
     amount: amount
@@ -153,9 +155,9 @@ procedure CallTransfer(to: ByStr20, amount: Uint128)
 end
 
 
-transition OnBoughtMask(token_id: Uint256)
+transition OnBeginReward(token_id: Uint256)
   OnlyCrowdSale;
-  OnlyNotExists token_id;
+  OnlyTokenHolderNotExists token_id;
 
   current_block <-& BLOCKNUMBER;
   blocks_amount <- blocks_for_rewards;
@@ -187,7 +189,6 @@ end
 
 transition SetCrowdSale(address: ByStr20)
   OnlyAdmin;
-  
 
   crowd_sale := address;
 
@@ -212,6 +213,13 @@ transition SetRewards(blocks: BNum, rewards_amount: Uint128)
   event e
 end
 
+(* @dev Updates the dmz contract address; used only by contract owner *)
+transition UpdateDMZ(new_dmz: ByStr20)
+  OnlyAdmin;
+  dmz := new_dmz;
+  e = {_eventname: "UpdateDMZ"; new_dmz: new_dmz};
+  event e
+end
 
 (* callbacks *)
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
