@@ -3,8 +3,8 @@ from random import *
 
 DECIMAL = 10**18
 
-blocks_for_rewards = 5000
-rewards = 20 * DECIMAL // blocks_for_rewards
+blocks_for_rewards = 2160
+rewards = (0.0001851851 * DECIMAL) // blocks_for_rewards
 BLOCK_NUMBER = 2870309
 
 def claim(current_block, acumulated_block):
