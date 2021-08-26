@@ -25,6 +25,8 @@ Contracts:
 1. Deploy marketplace contract.
 1. Update auctions contract, `UpdateDirectListing(marketplace)`.
 
+## Maintenance
+1. Transfer some DMZ periodically to claim distributor contract for the claim rewards.
 
 
 
