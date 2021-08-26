@@ -36,7 +36,7 @@ async function main() {
         const VERSION = bytes.pack(parseInt(networkId.result), 1);
 
         // deploy impl
-        const implCode = fs.readFileSync(__dirname + '/../crowd-sale/crowd_sale.scilla', 'utf-8');
+        const implCode = fs.readFileSync(__dirname + '/../crowd-sale/line_crowd_sale.scilla', 'utf-8');
         const init = [
             {
                 vname: '_scilla_version',

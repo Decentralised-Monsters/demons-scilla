@@ -45,6 +45,10 @@ let option_value =
 
 let option_uint128 = @option_value Uint128
 
+(* ((total_supply / decimal) + 1) * starting_price *)
+(* ts: total_supply *)
+(* b: decimal value *)
+(* price: starting price *)
 let get_price =
   fun (ts: Uint256) =>
   fun (b: Uint256) =>
