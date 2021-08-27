@@ -6,7 +6,16 @@
  * SetMaxLVL - owner only method for change limit for lvl.
  * - value (Uint32) - the new value for `max_lvl`.
  * SetFeeMultiplier - owner only method to set a new fee multiplier.
- * - new_multiplier (uint32) - the new value for `fee_multiplier`.
+ * - new_multiplier (Uint32) - the new value for `fee_multiplier`.
+ * SetMinLvlReward - owner only method to change minimum lvl required to start earning rewards.min_lvl_for_earn_reward
+ * - new_min_lvl (Uint32) - the new value for `min_lvl_for_earn_reward`.
+ * **UpdateDMZ** - A owner transition to update the dmz contract address.
+ * - new_dmz (ByStr20) - The new dmz contract address.
+ * **UpdateWallet** - A owner transition to update the wallet address.
+ * - new_wallet (ByStr20) - The new wallet address.
+ * **UpdateDistributor** - A owner transition to update the distributor contract address.
+ * - new_distributor (ByStr20) - The new distributor address.
+
 
 ## Users Transitions
 ```Ocaml
@@ -18,9 +27,11 @@ contract LVLUpContract
 ```Ocaml
 contract LVLUpContract
   SetMaxLVL(value: Uint32)
+  SetMinLvlReward(new_min_lvl: Uint32)
   SetFeeMultiplier(new_multiplier: Uint32)
   UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
+  UpdateDistributor(new_distributor: ByStr20)
 ```
 
 ## Callbacks
@@ -34,6 +45,7 @@ contract LVLUpContract
  * contract_owner - Admin of contract.
  * init_wallet - The wallet who will get rewards.
  * init_dmz - The main ZRC2 token address.
+ * init_distributor - The claim distributor address.
  * main - The Main NFT token address.
 
 ```Ocaml
@@ -42,6 +54,7 @@ contract LVLUpContract
   contract_owner: ByStr20,
   init_wallet: ByStr20,
   init_dmz: ByStr20,
+  init_distributor: ByStr20,
   main: ByStr20 with contract
     field token_lvl: Map Uint256 Uint32
   end
@@ -67,14 +80,18 @@ contract DMZClaimLib
 ## Mutable Fields
  * dmz - Tracks the current dmz contract
  * wallet - Tracks the current wallet to receive the commission
+ * distributor - Tracks the current distributor address to invoke the reward mechanism
  * max_lvl - The max lvl for token.
+ * min_lvl_for_earn_reward - The minimum lvl required to enable reward mechanism.
  * fee_multiplier - The constant multiplier used to compute the level up fee.
 
 ```Ocaml
 contract LVLUpContract
   field dmz: ByStr20 = init_dmz
   field wallet: ByStr20 = init_wallet
+  field distributor: ByStr20 = init_distributor
   field max_lvl: Uint32 = Uint32 5
+  field min_lvl_for_earn_reward: Uint32 = Uint32 2
   field fee_multiplier: Uint32 = Uint32 100
 ```
 
