@@ -177,21 +177,33 @@ procedure AddReserve(uri: String)
   reserve := new_count_reserve
 end
 
+(* @dev Updates the token image uri list; used by contract owner. *)
+(* @param token_uris_list: image URI list in REVERSE order, 20.jpg, 19.jpg...01.jpg *)
 transition AddReserveList(token_uris_list: List String)
   IsContractOwner;
   forall token_uris_list AddReserve
 end
 
+(* @dev Updates the starting price; used by contract owner. *)
+(* @param value: new starting price in Qa *)
 transition ChangePrice(value: Uint256)
   IsContractOwner;
-  price := value
+  price := value;
+  e = {_eventname: "ChangePrice"; new_price: value};
+  event e
 end
 
+(* @dev Updates the constant factor; used by contract owner. *)
+(* @param value: new decimal value *)
 transition ChangeDecimal(value: Uint256)
   IsContractOwner;
-  decimal := value
+  decimal := value;
+  e = {_eventname: "ChangeDecimal"; new_decimal: value};
+  event e
 end
 
+(* @dev Buy a demon with ZILs. *)
+(* Price of demon is set by math model. Users will get refund if they pay more than necessary. *)
 transition Buy()
   total_supply <- total;
   decimal_value <- decimal;
@@ -222,6 +234,7 @@ transition TransferZilsToWallet()
   AddFunds wallet_o bal
 end
 
+(* @dev Updates the wallet contract address; used only by contract owner *)
 transition UpdateWallet(new_wallet: ByStr20)
   IsContractOwner;
   wallet := new_wallet;
@@ -230,6 +243,7 @@ transition UpdateWallet(new_wallet: ByStr20)
 end
 
 (* callbacks *)
+(* Buy -> Minting -> Mint (demon_contract) -> MintCallBack *)
 transition MintCallBack(recipient: ByStr20, token_id: Uint256, token_uri: String)
   IsMain;  
 

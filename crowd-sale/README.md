@@ -1,44 +1,43 @@
-# Start with the interface
+# Line Crowd Sale
 
-* Buy - Method for buy mask
-* - `_amount` - the Amount of ZILs.
-* TransferZilsToWallet - Just send the stored ZILs to `wallet`
-* AddReserveList - Admin can add to list new masks.
-* - token_uris_list (List String) - URLs to IPFS.
-* MintCallBack - Contract able to mint new tokens.
+The crowd sale contract contains the buy mechanism that will mint the demon. It uses a line-step curve formula to compute the price of each demon.
 
-transitions user only:
+ * **AddReserveList** - An owner transition to update the list of token image uri. Image URI must be uploaded in reverse. E.g. start from 10.jpg, 09.jpg ... 01.jpg.
+ * - token_uris_list (List String) - The list of demon image URIs, separated by commas in square brakcets, e.g. ["http://cloud/image/20.jpg", "http://cloud/image/19.jpg"...]
+ * **ChangePrice**
+
+## Users Transitions
 ```Ocaml
-contract BondingCurvedDistributor
+contract LineCurvedDistributor
   Buy()
-  ReturnFunds()
 ```
 
-transitions admin only:
+## Admin Transitions
 ```Ocaml
-contract BondingCurvedDistributor
+contract LineCurvedDistributor
   AddReserveList(token_uris_list: List String)
+  ChangePrice(value: Uint256)
+  ChangeDecimal(value: Uint256)
+  UpdateWallet(new_wallet: ByStr20)
 ```
 
-transitions callbacks:
+## Callbacks
 ```Ocaml
-contract AuctionFactory
+contract LineCurvedDistributor
   MintCallBack(recipient: ByStr20, token_id: Uint256, token_uri: String)
 ```
 
 ## Constructor
 
- * contract_owner - Admin of contract.
- * wallet - The wallet who will get rewards.
- * distributor - The claim contract.
- * main - The Main NFT token address.
+  * contract_owner - Admin of contract.
+  * init_wallet - A wallet for storing rewards or transfer dmz to users when they buy demon
+  * main - The Main NFT token address.
 
 ```Ocaml
-contract BondingCurvedDistributor
+contract LineCurvedDistributor
 (
   contract_owner: ByStr20,
-  wallet: ByStr20,
-  distributor: ByStr20,
+  init_wallet: ByStr20,
   main: ByStr20 with contract
     field token_id_count: Uint256
   end
@@ -47,77 +46,44 @@ contract BondingCurvedDistributor
 
 ## Errors
 
- * CodeNotContractOwner - If `_sender` is not equal `contract_owner`
- * CodeNotMain - If `_sender` is not main contract ZRC1.
- * CodeInsufficientFunds - If `_amount` not enough for buy a mask.
+  * CodeNotMain - If `MintCallBack` is not callback from `main`
+  * CodeInsufficientFunds - If users do not have sufficient funds when buying demons.
+  * CodeNotContractOwner - If transition is not invoked by contract owner.
+  * CodeNotFound - If something is not found.
 
 ```Ocaml
-contract DMZClaimLib
+contract LineCurvedDistributor
   type Error =
     | CodeNotMain           => Int32 -1
     | CodeInsufficientFunds => Int32 -2
     | CodeNotContractOwner  => Int32 -3
+    | CodeNotFound          => Int32 -4
 ```
 
-## Mutable fields
-
- * reserve - Amount of reserve tokens for minting.
- * total - Total of already minted tokens.
- * tokens_reserve - A Map with URLs.
+## Mutable Fields
+  * wallet - Tracks the current wallet to transfer dmz
+  * reserve - Tracks the available demons to buy
+  * total - Tracks the total demons minted so far
+  * tokens_reserve - Contains list of demons image URIs
+  * decimal - constant factor to compute the buy price
+  * price - starting demon price
 
 ```Ocaml
-contract BondingCurvedDistributor
+contract LineCurvedDistributor
+  field wallet: ByStr20 = init_wallet
 
   field reserve: Uint256 = zero256
   field total: Uint256 = zero256
 
   field tokens_reserve: Map Uint256 String = Emp Uint256 String
+  field decimal: Uint256 = Uint256 26
+  field price: Uint256 = Uint256 3000000000000000
 ```
 
-## Math model
+## Math Model
 
-More understand [bonding-curves-in-depth](https://blog.relevant.community/bonding-curves-in-depth-intuition-parametrization-d3905a681e0a)
-
-A bonding curve contract is an automatic market maker (a smart contract that enables users to buy tokens) with the following properties:
-
- * A token can be minted (bought) at any time according to a price set by a smart contract.
-   This price increases as token supply grows.
- * The money ZILs paid for tokens is kept in the smart contract (reserve pool).
-
-for settings price need change params of `customization` and `exponent`.
-
-For params:
-  * `customization` = 100000000000
-  * `exponent` = 2
-  * `total_supply` = 10
-
-how get `pool_balance`:
-
-`pool_balance = customization / (exponent + 1) * total_supply**(exponent + 1)` = `33333333333000`
-
-```python
-customization = 100000000000
-exponent = 2
-total_supply = 10
-
-pool_balance = customization // (exponent + 1) * total_supply**(exponent + 1)
+To achieve a line step curve, the following formula is used:
 ```
-
-Now we need get a price:
-
-For params:
-  * `customization` = 100000000000
-  * `exponent` = 2
-  * `total_supply` = 10
-  * `pool_balance` = 33333333333000
-
-`price = (customization / (exponent + 1) (total_supply + 1) ** (exponent + 1)) - pool_balance` = `11033333333223`ZIL
-
-```python
-customization = 100000000000
-exponent = 2
-total_supply = 10
-pool_balance = 33333333333000
-
-price = (customization // (exponent + 1) * (total_supply + 1) ** (exponent + 1)) - pool_balance
+  ((total_supply / decimal) + 1) * price
 ```
+where `total_supply` is the current number of demons being minted, `decimal` is some constant factor and `price` is the starting price of the demon.

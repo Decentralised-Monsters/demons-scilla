@@ -26,6 +26,7 @@ Our auction contract will have a simple interface that allows users to place bid
  * - new_min_auction_price (Uint128) - The new minimum auction price.
  * **UpdateMinIncrement** - A owner transition to update the minimum increment rate required when users create an auction.
  * - new_min_increment (Uint128) - The new minimum increment rate in percentage.
+* **UpdatePause** - A owner transition to pause / unpause the contract.
 
 ## Users Transitions
 ```Ocaml
@@ -45,6 +46,7 @@ contract AuctionFactory
   UpdateWallet(new_wallet: ByStr20)
   UpdateMinAuctionPrice(new_min_auction_price: Uint128)
   UpdateMinIncrement(new_min_increment: Uint128)
+  UpdatePause()
 ```
 
 ## Callbacks
@@ -116,13 +118,13 @@ What about `bid_increment` and `highest_binding_bid`? It’s worth taking a mome
 ### Bid Mechanism (TLDR Version)
 ```
 starting_price = 200
-bid_increment = 10
+bid_increment = 10%
 
 1. User A bids 300      (highest_binding_bid = 300, highest_bid = 300)
-2. User B bids 350      (highest_binding_bid = 310, highest_bid = 350)   <-- highest_binding_bid is 310 because the logic will increment the prev_highest_bid + increment (300 + 10) and then take min(310, 350)
-3. User A raise to 400. (highest_binding_bid = 360, highest_bid = 400) <-- same logic as above min(360, 400)
+2. User B bids 350      (highest_binding_bid = 330, highest_bid = 350)   <-- highest_binding_bid is 330 because the logic will increment the prev_highest_bid + increment (10% of 300) and then take min(330, 350)
+3. User A raise to 400. (highest_binding_bid = 363, highest_bid = 400) <-- same logic as above min(363, 400)
 3. Auction timed out. A wins.
-4. A claims the card.  (360 is deducted from A)   <-- remaning 40 is transferred back to User A. A portion of the 360 will be the commission and transferred to the commission wallet. The remaning portion is sent to the auction creator.
+4. A claims the card.  (363 is deducted from A)   <-- remaning 37 is transferred back to User A. A portion of the 363 will be the commission and transferred to the commission wallet. The remaning portion is sent to the auction creator.
 5. B claims back funds (gets back his 350)
 ```
 
@@ -145,6 +147,10 @@ bid_increment = 10
  * CodeTokenAlreadyInAuction - If `token_id` already exists.
  * CodeTokenListedInDirectSale - If `token_id` already exists in marketplace contract.
  * CodeAuctionNotApprovedToTransfer - If `token_id` not yet approved on demon contract for auction to transfer owner demon to auction.
+ * CodeIncrementLessThanRequired - If user sets a bid increment that is less than `min_increment`.
+ * CodePriceLessThanRequired - If user sets a price that is less than `min_auction_price`.
+ * CodePauseNotPause - If the check paused or unpaused fails.
+ * CodeInputOutOfRange - If the input increment or price is out of range.
 
 ```Ocaml
 contract AuctionFactoryLib
@@ -167,6 +173,8 @@ contract AuctionFactoryLib
     | CodeAuctionNotApprovedToTransfer => Int32 -16
     | CodeIncrementLessThanRequired    => Int32 -17
     | CodePriceLessThanRequired        => Int32 -18
+    | CodePauseNotPause                => Int32 -19 
+    | CodeInputOutOfRange              => Int32 -20
 ```
 
 
@@ -174,6 +182,7 @@ contract AuctionFactoryLib
  * dmz - Tracks the current dmz contract
  * wallet - Tracks the current wallet to receive the commission
  * direct_listing - Tracks the current marketplace contract
+ * pause - Tracks if contract is paused or unpaused
  * funds_by_bidder - Storage for auction participants `_sender` -> `auction_id` -> `_amount`.
  * auctions - Storage for auction: `auction_id` -> `Auction`
  * bid_count - Count the number of bids per auction listing
@@ -195,16 +204,17 @@ contract AuctionFactory
   field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128) 
     = Emp ByStr20 (Map Uint256 Uint128)
 
+  field pause: Uint32 = not_pause
+
   field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
   field token_auctions: Map Uint256 Uint256 = Emp Uint256 Uint256
   field auctions: Map Uint256 Auction = Emp Uint256 Auction
   field total: Uint256 = zero256
-  field commission: Uint128 = Uint128 10
+  field commission: Uint128 = Uint128 5
   field min_increment: Uint128 = Uint128 5
   field min_auction_price: Uint128 = Uint128 1000000000000000000
 ```
 
 ## Dummy Auction Contract
-To be explained in-depth.
 Basically required for initial deployment because neither the auction contract nor marketplace contract is up.
 See the main readme, deploy section for more info.

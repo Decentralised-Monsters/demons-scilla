@@ -27,7 +27,6 @@ type Error =
 | CodeNotApprovedForAll
 | CodeNotOwnerOrOperator
 | CodeNotApprovedSpenderOrOperator
-| CodeMinLvl
 
 (* Global variables *)
 let zero = Uint256 0
@@ -91,7 +90,6 @@ let make_error =
       | CodeNotApprovedForAll            => Int32 -8
       | CodeNotOwnerOrOperator           => Int32 -9
       | CodeNotApprovedSpenderOrOperator => Int32 -10
-      | CodeMinLvl                       => Int32 -11
       end
     in
     { _exception : "Error"; code : result_code }
@@ -505,6 +503,7 @@ transition SetImageURI(token_id: Uint256, new_uri: String)
   event e
 end
 
+(* @dev Minter only transition to update the demon level *)
 transition ChangeLVL(token_id: Uint256, value: Uint32)
   IsMinter _sender;
   prev_lvl <- token_lvl[token_id];

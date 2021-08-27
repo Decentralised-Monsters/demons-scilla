@@ -79,6 +79,7 @@ contract MarketPlace
  * CodePauseNotPause - If contract is paused or unpaused.
  * CodeTokenListedInAuction - If `token_id` already exists in auction contract.
  * CodeTokenAlreadyListed - If `token_id` already exists.
+ * CodeCommissionOutOfRange - If `commission` is set more than 100%.
 
 ```
 contract MarketPlace
@@ -90,6 +91,7 @@ contract MarketPlace
     | CodePauseNotPause            => Int32 -5
     | CodeTokenListedInAuction     => Int32 -6
     | CodeTokenAlreadyListed       => Int32 -7
+    | CodeCommissionOutOfRange     => Int32 -8
 ```
 
 ## Mutable Fields
@@ -120,6 +122,5 @@ contract MarketPlace
 ```
 
 ## Dummy Marketplace Contract
-To be explained in-depth.
 Basically required for initial deployment because neither the auction contract nor marketplace contract is up.
 See the main readme, deploy section for more info.
