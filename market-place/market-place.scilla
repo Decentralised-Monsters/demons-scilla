@@ -182,12 +182,12 @@ procedure CallTransferFromDMZ(amount: Uint128, from: ByStr20, to: ByStr20)
   send msgs
 end
 
-procedure TransferToOwner(token_id: Uint256, owner: ByStr20)
+procedure TransferToOwner(token_id: Uint256, order_owner: ByStr20)
   transfered = {
     _tag: "Transfer";
     _recipient: main;
     _amount: zero128;
-    to: owner;
+    to: order_owner;
     token_id: token_id
   };
   msgs = one_msg transfered;
@@ -231,7 +231,7 @@ end
 procedure CancelOrder(cancel_order_id: Uint256)
   listing <- orderbook[cancel_order_id];
   match listing with
-  | Some (Order owner price token_id item_order_id) =>
+  | Some (Order order_owner price token_id item_order_id) =>
     delete orderbook[item_order_id];
     delete token_orderbook[token_id];
     e = {
@@ -239,7 +239,7 @@ procedure CancelOrder(cancel_order_id: Uint256)
       item_order_id: item_order_id
     };
     event e;
-    TransferToOwner token_id owner
+    TransferToOwner token_id order_owner
   | None =>
     err = CodeOrderNotFound;
     ThrowError err
@@ -310,14 +310,14 @@ transition Purchase(purchase_order_id: Uint256)
   listing <- orderbook[purchase_order_id];
   current_commission <- commission;
   match listing with
-  | Some (Order owner price token_id item_order_id) =>  
+  | Some (Order order_owner price token_id item_order_id) =>  
       (* amount is correct go ahead and remove order and transfer Dragon plus funds*)
       (* remove fee from the purchase amount*)
       fees = muldiv price current_commission one_hundred128;
       sellers_amount = builtin sub price fees;
 
       wallet_o <- wallet;
-      CallTransferFromDMZ sellers_amount _sender owner;
+      CallTransferFromDMZ sellers_amount _sender order_owner;
       CallTransferFromDMZ fees _sender wallet_o;
 
       (* Delete the order from the orderbook*)
@@ -330,7 +330,7 @@ transition Purchase(purchase_order_id: Uint256)
         item_order_id: item_order_id;
         token_id: token_id;
         buyer_address: _sender;
-        seller_address: owner;
+        seller_address: order_owner;
         price_sold: sellers_amount;
         fee: fees
       };
@@ -348,10 +348,10 @@ transition CancelListing(cancel_order_id : Uint256)
   CheckPause not_pause;
   listing <- orderbook[cancel_order_id];
   match listing with
-  | Some (Order owner price token_id item_order_id) =>  
+  | Some (Order order_owner price token_id item_order_id) =>  
     (*check if owner of order*)
-    is_owner = builtin eq _sender owner;
-    match is_owner with
+    is_order_owner = builtin eq _sender order_owner;
+    match is_order_owner with
     | True => 
       (*Go ahead delete the order and return Dragon*)
       delete orderbook[item_order_id];
@@ -361,8 +361,8 @@ transition CancelListing(cancel_order_id : Uint256)
         extracted_order: item_order_id
       };
       event e;
-      (*transfer Dragon to owner*)
-      TransferToOwner token_id owner
+      (*transfer demon to owner*)
+      TransferToOwner token_id order_owner
     | False =>
       err = CodeNotAuthorized;
       ThrowError err
