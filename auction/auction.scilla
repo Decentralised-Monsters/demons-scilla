@@ -26,6 +26,7 @@ type Error =
 | CodePriceLessThanRequired
 | CodePauseNotPause
 | CodeInputOutOfRange
+| CodeWithdrawNoBid
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -79,7 +80,7 @@ let make_error =
       | CodeTimeOut                      => Int32 -5
       | CodeBidLessThanCurrent           => Int32 -6
       | CodeNotFound                     => Int32 -7
-      | CodeIsAuctionOwner                      => Int32 -8
+      | CodeIsAuctionOwner               => Int32 -8
       | CodeNotEndedOrCanceled           => Int32 -9
       | CodeOnlyWithdrawn                => Int32 -10
       | CodeNotTokenOwner                => Int32 -11
@@ -92,6 +93,7 @@ let make_error =
       | CodePriceLessThanRequired        => Int32 -18
       | CodePauseNotPause                => Int32 -19 
       | CodeInputOutOfRange              => Int32 -20
+      | CodeWithdrawNoBid                => Int32 -21
       end
     in
     { _exception : "Error"; code : result_code }
@@ -387,7 +389,6 @@ procedure CheckBidIncrement(bid_increment: Uint128)
     ThrowError err
   end
 end
-
 
 (* check if token_id is already in marketplace contract *)
 procedure CheckDirectListing(token_id: Uint256)
@@ -740,7 +741,7 @@ transition PlaceBid(id: Uint256, amount: Uint128)
   end
 end
 
-(* @dev Allows the owner to drop the auction listing if the auction has no bids and still within the time limit *)
+(* @dev Allows the owner to drop the auction listing if the auction has no bids or the auction has ended without any bids *)
 (* @param id: Auction id to cancel *)
 transition CancelAuction(id: Uint256)
   CheckPause not_pause;
@@ -755,7 +756,6 @@ transition CancelAuction(id: Uint256)
       match static with
       | StaticAuction auction_owner bid_increment start_block end_block token_id =>
         OnlyAuctionOwner auction_owner;
-        OnlyBeforeEnd end_block current_block;
 
         (* check if highest bidder is auction_owner *)
         (* if so, this implies no one has bid; can proceed with cancelling *)
@@ -812,53 +812,64 @@ transition Withdraw(id: Uint256)
       | StaticAuction auction_owner bid_increment start_block end_block token_id =>
         OnlyEnded end_block current_block;
 
-        is_highest_bidder = builtin eq highest_bidder _sender;
-        is_auction_owner = builtin eq auction_owner _sender;
-        UpdateCounter id sub_operation;
+        (* is highest bidder is owner, this implies no one has bid *)
+        (* auction owner should call CancelAuction *)
+        is_no_bidder = builtin eq highest_bidder auction_owner;
 
-        match is_auction_owner with
+        match is_no_bidder with
         | True =>
-          match is_highest_bidder with
-          | True =>
-            (* not possible to reach here because there is at least one bid *)
-            err = CodeIsAuctionOwner;
-            ThrowError err
-          | False =>
-            (* owner claiming the winning bid *)
-            some_bid_amount <- funds_by_bidder[highest_bidder][id];
-
-            new_owner_has_withdrawn = True;
-            new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
-            auctions[id] := new_auction;
-            
-            (* winner to pay only highest binding bid, remainder to be refunded *)
-            amount = option_uint128 zero128 some_bid_amount;
-            extra = builtin sub amount highest_binding_bid;
-            com = muldiv dev_commission highest_binding_bid one_hundred128;
-            value = builtin sub highest_binding_bid com;
-
-            delete funds_by_bidder[highest_bidder][id];
-
-            wallet_o <- wallet;
-            CallTransferDMZ highest_bidder extra;
-            CallTransferDMZ auction_owner value;
-            CallTransferDMZ wallet_o com;
-            DeleteAuction id
-          end
+          err = CodeWithdrawNoBid;
+          ThrowError err
         | False =>
-          (* other bidders *)
-          match is_highest_bidder with
+          (* highest bidder exists *)
+          is_highest_bidder = builtin eq highest_bidder _sender;
+          is_auction_owner = builtin eq auction_owner _sender;
+          UpdateCounter id sub_operation;
+
+          match is_auction_owner with
           | True =>
-            (* user is highest bidder; transfer card ownership to winner *)
-            (* remove the token_id mapping to allow new owner to place it for auction *)
-            TransferNFT _sender token_id;
-            DeleteAuction id;
-            delete token_auctions[token_id]
+            match is_highest_bidder with
+            | True =>
+              (* not possible to reach here because there is at least one bid *)
+              err = CodeIsAuctionOwner;
+              ThrowError err
+            | False =>
+              (* owner claiming the winning bid *)
+              some_bid_amount <- funds_by_bidder[highest_bidder][id];
+  
+              new_owner_has_withdrawn = True;
+              new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
+              auctions[id] := new_auction;
+              
+              (* winner to pay only highest binding bid, remainder to be refunded *)
+              amount = option_uint128 zero128 some_bid_amount;
+              extra = builtin sub amount highest_binding_bid;
+              com = muldiv dev_commission highest_binding_bid one_hundred128;
+              value = builtin sub highest_binding_bid com;
+  
+              delete funds_by_bidder[highest_bidder][id];
+  
+              wallet_o <- wallet;
+              CallTransferDMZ highest_bidder extra;
+              CallTransferDMZ auction_owner value;
+              CallTransferDMZ wallet_o com;
+              DeleteAuction id
+            end
           | False =>
-            (* user did not win bid; refund back locked up DMZ *)
-            ReturnFunds id _sender;
-            DeleteAuction id;
-            delete funds_by_bidder[_sender][id]
+            (* other bidders *)
+            match is_highest_bidder with
+            | True =>
+              (* user is highest bidder; transfer card ownership to winner *)
+              (* remove the token_id mapping to allow new owner to place it for auction *)
+              TransferNFT _sender token_id;
+              DeleteAuction id;
+              delete token_auctions[token_id]
+            | False =>
+              (* user did not win bid; refund back locked up DMZ *)
+              ReturnFunds id _sender;
+              DeleteAuction id;
+              delete funds_by_bidder[_sender][id]
+            end
           end
         end
       end
