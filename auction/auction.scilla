@@ -11,7 +11,7 @@ type Error =
 | CodeNotStartedYet
 | CodeAlreadyCanceled
 | CodeTimeOut
-| CodeIsOwner
+| CodeIsAuctionOwner
 | CodeBidLessThanCurrent
 | CodeNotFound
 | CodeNotEndedOrCanceled
@@ -79,7 +79,7 @@ let make_error =
       | CodeTimeOut                      => Int32 -5
       | CodeBidLessThanCurrent           => Int32 -6
       | CodeNotFound                     => Int32 -7
-      | CodeIsOwner                      => Int32 -8
+      | CodeIsAuctionOwner                      => Int32 -8
       | CodeNotEndedOrCanceled           => Int32 -9
       | CodeOnlyWithdrawn                => Int32 -10
       | CodeNotTokenOwner                => Int32 -11
@@ -194,6 +194,8 @@ contract AuctionFactory
 )
 
 (* Mutable fields *)
+field owner: ByStr20 = contract_owner
+field pending_owner: Option ByStr20 = None {ByStr20}
 field dmz: ByStr20 = init_dmz
 field wallet: ByStr20 = init_wallet
 
@@ -224,7 +226,8 @@ procedure ThrowError(err : Error)
 end
 
 procedure IsContractOwner()
-  is_contract_owner = builtin eq contract_owner _sender;
+  current_owner <- owner;
+  is_contract_owner = builtin eq current_owner _sender;
   match is_contract_owner with
   | True => 
   | False =>
@@ -251,13 +254,13 @@ procedure OnlyWithdrawn(owner_has_withdrawn: Bool)
   end
 end
 
-procedure OnlyOwner(owner: ByStr20)
-  is_owner = builtin eq _sender owner;
+procedure OnlyAuctionOwner(auction_owner: ByStr20)
+  is_owner = builtin eq _sender auction_owner;
 
   match is_owner with
   | True =>
   | False =>
-    err = CodeIsOwner;
+    err = CodeIsAuctionOwner;
     ThrowError err
   end
 end
@@ -319,12 +322,12 @@ procedure OnlyNotCanceled(canceled: Bool)
   end
 end
 
-procedure OnlyNotOwner(owner: ByStr20)
-  is_owner = builtin eq _sender owner;
+procedure OnlyNotAuctionOwner(auction_owner: ByStr20)
+  is_owner = builtin eq _sender auction_owner;
 
   match is_owner with
   | True =>
-    err = CodeIsOwner;
+    err = CodeIsAuctionOwner;
     ThrowError err
   | False =>
   end
@@ -664,10 +667,10 @@ transition PlaceBid(id: Uint256, amount: Uint128)
       is_highest_bid_zero = builtin eq highest_bid zero128;
 
       match static with
-      | StaticAuction owner bid_increment start_block end_block token_id =>
+      | StaticAuction auction_owner bid_increment start_block end_block token_id =>
         OnlyAfterStart start_block current_block;
         OnlyBeforeEnd end_block current_block;
-        OnlyNotOwner owner;
+        OnlyNotAuctionOwner auction_owner;
         CheckBidAmount new_bid highest_binding_bid bid_increment;
 
         (* update bid count only after checks *)
@@ -750,18 +753,18 @@ transition CancelAuction(id: Uint256)
     | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
       OnlyNotCanceled canceled;
       match static with
-      | StaticAuction owner bid_increment start_block end_block token_id =>
-        OnlyOwner owner;
+      | StaticAuction auction_owner bid_increment start_block end_block token_id =>
+        OnlyAuctionOwner auction_owner;
         OnlyBeforeEnd end_block current_block;
 
-        (* check if highest bidder is owner *)
+        (* check if highest bidder is auction_owner *)
         (* if so, this implies no one has bid; can proceed with cancelling *)
-        (* otherwise if there is at least one bid, owner is not allowed to cancel auction *)
-        allow_to_cancel = builtin eq highest_bidder owner;
+        (* otherwise if there is at least one bid, auction_owner is not allowed to cancel auction *)
+        allow_to_cancel = builtin eq highest_bidder auction_owner;
 
         match allow_to_cancel with
         | True =>
-          (* highest bidder == owner; no one has yet to place a bid on this listing *)
+          (* highest bidder == auction_owner; no one has yet to place a bid on this listing *)
           (* go ahead with cancel process *)
           new_canceled = True;
           new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
@@ -806,19 +809,19 @@ transition Withdraw(id: Uint256)
     match auction with
     | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
       match static with
-      | StaticAuction owner bid_increment start_block end_block token_id =>
+      | StaticAuction auction_owner bid_increment start_block end_block token_id =>
         OnlyEnded end_block current_block;
 
         is_highest_bidder = builtin eq highest_bidder _sender;
-        is_owner = builtin eq owner _sender;
+        is_auction_owner = builtin eq auction_owner _sender;
         UpdateCounter id sub_operation;
 
-        match is_owner with
+        match is_auction_owner with
         | True =>
           match is_highest_bidder with
           | True =>
             (* not possible to reach here because there is at least one bid *)
-            err = CodeIsOwner;
+            err = CodeIsAuctionOwner;
             ThrowError err
           | False =>
             (* owner claiming the winning bid *)
@@ -838,7 +841,7 @@ transition Withdraw(id: Uint256)
 
             wallet_o <- wallet;
             CallTransferDMZ highest_bidder extra;
-            CallTransferDMZ owner value;
+            CallTransferDMZ auction_owner value;
             CallTransferDMZ wallet_o com;
             DeleteAuction id
           end
@@ -939,6 +942,40 @@ transition UpdatePause()
   event e
 end
 
+(* @dev: Sets a new contract owner; used by contract owner only. *)
+(* Current owner can abort the process by calling this transition with their own address *)
+(* @param: new_owner New owner address *)
+transition RequestOwnershipTransfer(new_owner: ByStr20)
+  IsContractOwner;
+  po = Some {ByStr20} new_owner;
+  pending_owner := po;
+  e = {_eventname: "RequestOwnershipTransfer"; new_owner: new_owner};
+  event e
+end
+
+(* @dev: New owner accepts the ownership transfer request; used by the new owner only. *)
+transition ConfirmOwnershipTransfer()
+  optional_po <- pending_owner;
+  match optional_po with
+  | Some pend_owner =>
+    caller_is_new_owner = builtin eq _sender pend_owner;
+    match caller_is_new_owner with
+    | True =>
+      (* transfer ownership *)
+      owner := pend_owner;
+      none = None {ByStr20};
+      pending_owner := none;
+      e = {_eventname: "ConfirmOwnershipTransfer"; new_owner: pend_owner};
+      event e
+    | False =>
+      (* caller is not the new owner, do nothing *)
+      err = CodeNotContractOwner;
+      ThrowError err
+    end
+  | None =>
+    (* ownership transfer is not in-progress, do nothing *)
+  end
+end
 
 (*Empty callbacks*)
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
