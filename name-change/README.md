@@ -43,8 +43,8 @@ contract NameContract
 ## Constructor
 
  * contract_owner - Admin of contract.
- * wallet - The wallet who will get rewards.
- * dmz - The main ZRC2 token address.
+ * init_wallet - The wallet who will get rewards.
+ * init_dmz - The main ZRC2 token address.
  * main - The Main NFT token address.
 
 ```Ocaml

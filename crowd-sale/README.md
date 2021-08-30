@@ -9,6 +9,8 @@ The crowd sale contract contains the buy mechanism that will mint the demon. It 
  * - value (Uint256) - new starting price
  * **ChangeDecimal** - An owner transition to change the constant factor in the line curve formula.
  * - value (Uint256) - new constant factor
+ * **UpdateDMZ** - A owner transition to update the dmz contract address.
+ * - new_dmz (ByStr20) - The new dmz contract address.
  * **UpdateWallet** - A owner transition to update the wallet address.
  * - new_wallet (ByStr20) - The new wallet address.
  * **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
@@ -27,6 +29,7 @@ contract LineCurvedDistributor
   AddReserveList(token_uris_list: List String)
   ChangePrice(value: Uint256)
   ChangeDecimal(value: Uint256)
+  UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
   RequestOwnershipTransfer(new_owner: ByStr20)
   ConfirmOwnershipTransfer()
@@ -42,12 +45,14 @@ contract LineCurvedDistributor
 
   * contract_owner - Admin of contract.
   * init_wallet - A wallet for storing rewards or transfer dmz to users when they buy demon
+  * init_dmz - the main ZRC2 token address.
   * main - The Main NFT token address.
 
 ```Ocaml
 contract LineCurvedDistributor
 (
   contract_owner: ByStr20,
+  init_dmz: ByStr20,
   init_wallet: ByStr20,
   main: ByStr20 with contract
     field token_id_count: Uint256
@@ -74,18 +79,21 @@ contract LineCurvedDistributor
 ## Mutable Fields
   * owner - current contract owner
   * pending_owner - new to-be contract owner
+  * dmz - Tracks the current dmz contract
   * wallet - Tracks the current wallet to transfer dmz
   * reserve - Tracks the available demons to buy
   * total - Tracks the total demons minted so far
   * tokens_reserve - Contains list of demons image URIs
   * decimal - constant factor to compute the buy price
   * price - starting demon price
+  * buy_incentive - DMZ rewards issued when users buy a demon
 
 ```Ocaml
 contract LineCurvedDistributor
   field owner: ByStr20 = contract_owner
   field pending_owner: Option ByStr20 = None {ByStr20}
 
+  field dmz: ByStr20 = init_dmz
   field wallet: ByStr20 = init_wallet
 
   field reserve: Uint256 = zero256
@@ -94,6 +102,7 @@ contract LineCurvedDistributor
   field tokens_reserve: Map Uint256 String = Emp Uint256 String
   field decimal: Uint256 = Uint256 26
   field price: Uint256 = Uint256 3000000000000000
+  field buy_incentive: Uint128 = Uint128 200000000000000000000
 ```
 
 ## Math Model
