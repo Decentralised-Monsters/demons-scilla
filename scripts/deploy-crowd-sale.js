@@ -11,15 +11,15 @@ async function main() {
     
     if (myArgs.length < 3) {
         console.error("Wrong arguments");
-        console.log("node deploy-crowd-sale.js [private_key] [0x_dmz_addr] [0x_demon_addr]");
+        console.log("node deploy-crowd-sale.js [private_key] [0x_wallet_addr] [0x_demon_addr]");
         return;
     }
 
     const privateKey = myArgs[0];
-    const dmz = myArgs[1];
+    const commWallet = myArgs[1];
     const demon = myArgs[2];
 
-    console.log("dmz: ", dmz);
+    console.log("commWallet: ", commWallet);
     console.log("demon: ", demon);
 
     const zilliqa = new Zilliqa('https://dev-api.zilliqa.com');
@@ -49,7 +49,7 @@ async function main() {
             {
                 vname: 'init_wallet',
                 type: 'ByStr20',
-                value: `${dmz}`,
+                value: `${commWallet}`,
             },
             {
                 vname: 'main',

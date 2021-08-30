@@ -9,17 +9,19 @@ const fs = require('fs');
 async function main() {
     const myArgs = process.argv.slice(2);
 
-    if (myArgs.length < 4) {
+    if (myArgs.length < 5) {
         console.error("Wrong arguments\n");
-        console.log("node deploy-mp.js [private_key] [0x_dmz_addr] [0x_demon_addr] [0x_auction_addr]");
+        console.log("node deploy-mp.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [0x_auction_addr]");
         return;
     }
 
     const privateKey = myArgs[0];
-    const dmz = myArgs[1];
-    const demon = myArgs[2];
-    const auction = myArgs[3];
+    const commWallet = myArgs[1];
+    const dmz = myArgs[2];
+    const demon = myArgs[3];
+    const auction = myArgs[4];
 
+    console.log("comm wallet: ", commWallet);
     console.log("dmz: ", dmz);
     console.log("demon: ", demon);
     console.log("auction: ", auction);
@@ -51,7 +53,7 @@ async function main() {
             {
                 vname: 'init_wallet',
                 type: 'ByStr20',
-                value: `${dmz}`,
+                value: `${commWallet}`,
             },
             {
                 vname: 'init_dmz',
