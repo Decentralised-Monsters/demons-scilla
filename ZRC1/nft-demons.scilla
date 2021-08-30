@@ -107,6 +107,9 @@ contract Demons
 
 (* Mutable fields *)
 
+field owner: ByStr20 = contract_owner
+field pending_owner: Option ByStr20 = None {ByStr20}
+
 (* Mapping of minters available *)
 field minters: Map ByStr20 Dummy =
     let emp_map = Emp ByStr20 Dummy in
@@ -146,7 +149,8 @@ procedure ThrowError(err : Error)
 end
 
 procedure IsContractOwner()
-  is_contract_owner = builtin eq contract_owner _sender;
+  current_owner <- owner;
+  is_contract_owner = builtin eq current_owner _sender;
   match is_contract_owner with
   | True => 
   | False =>
@@ -541,5 +545,40 @@ transition TransferFrom(to: ByStr20, token_id: Uint256)
     UpdateTokenCount add_operation to;
     e = {_eventname: "TransferFromSuccess"; from: token_owner; recipient: to; token_id: token_id};
     event e
+  end
+end
+
+(* @dev: Sets a new contract owner; used by contract owner only. *)
+(* Current owner can abort the process by calling this transition with their own address *)
+(* @param: new_owner New owner address *)
+transition RequestOwnershipTransfer(new_owner: ByStr20)
+  IsContractOwner;
+  po = Some {ByStr20} new_owner;
+  pending_owner := po;
+  e = {_eventname: "RequestOwnershipTransfer"; new_owner: new_owner};
+  event e
+end
+
+(* @dev: New owner accepts the ownership transfer request; used by the new owner only. *)
+transition ConfirmOwnershipTransfer()
+  optional_po <- pending_owner;
+  match optional_po with
+  | Some pend_owner =>
+    caller_is_new_owner = builtin eq _sender pend_owner;
+    match caller_is_new_owner with
+    | True =>
+      (* transfer ownership *)
+      owner := pend_owner;
+      none = None {ByStr20};
+      pending_owner := none;
+      e = {_eventname: "ConfirmOwnershipTransfer"; new_owner: pend_owner};
+      event e
+    | False =>
+      (* caller is not the new owner, do nothing *)
+      err = CodeNotContractOwner;
+      ThrowError err
+    end
+  | None =>
+    (* ownership transfer is not in-progress, do nothing *)
   end
 end
