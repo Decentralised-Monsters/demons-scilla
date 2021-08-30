@@ -12,10 +12,12 @@ Contract to track if demons are generating rewards and allow users to claim.
  * **SetLvlUp** - Change the LvlUp contract.
  * - address (ByStr20) - LvlUp contract address.
  * **UpdateDMZ** - A admin transition to update the dmz contract address.
-* - new_dmz (ByStr20) - The new dmz contract address.
-* **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
-* - new_owner (ByStr20) - new owner address
-* **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
+ * - new_dmz (ByStr20) - The new dmz contract address.
+ * **UpdateWallet** - A owner transition to update the wallet address.
+ * - new_wallet (ByStr20) - The new wallet address.
+ * **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
+ * - new_owner (ByStr20) - new owner address
+ * **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
 
 ## Users Transitions
 ```Ocaml
@@ -30,6 +32,7 @@ contract DMZClaimContract
   SetLvlUp(address: ByStr20)
   SetRewards(blocks: BNum, rewards_amount: Uint128)
   UpdateDMZ(new_dmz: ByStr20)
+  UpdateWallet(new_wallet: ByStr20)
   RequestOwnershipTransfer(new_owner: ByStr20)
   ConfirmOwnershipTransfer()
 ```
@@ -44,6 +47,7 @@ contract AuctionFactory
 ## Constructor
 
  * contract_owner - Admin of contract.
+ * init_wallet - A wallet for transferring claimed rewards to users
  * init_dmz - The main ZRC2 tokens.
  * main - The Main NFT token address.
 
@@ -51,6 +55,7 @@ contract AuctionFactory
 contract DMZClaimContract
 (
   contract_owner: ByStr20,
+  init_wallet: ByStr20,
   init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_owners: Map Uint256 ByStr20
@@ -82,6 +87,7 @@ contract DMZClaimLib
  * owner - current contract owner
  * pending_owner - new to-be contract owner
  * dmz - Tracks the current dmz contract.
+ * wallet - Tracks the current wallet to transfer dmz
  * blocks_for_rewards - Minimum blocks for get rewards.
  * rewards - Amount of rewards.
  * token_holder - Stores the blocknumber for acumulate rewards.
@@ -92,6 +98,7 @@ contract DMZClaimContract
   field owner: ByStr20 = contract_owner
   field pending_owner: Option ByStr20 = None {ByStr20}
   field dmz: ByStr20 = init_dmz
+  field wallet: ByStr20 = init_wallet
   field blocks_for_rewards: BNum = BNum 5000
   field rewards: Uint128 = Uint128 4000000000000000
   field token_holder: Map Uint256 Int256 = Emp Uint256 Int256
