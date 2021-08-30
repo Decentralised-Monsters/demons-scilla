@@ -87,7 +87,7 @@ field wallet: ByStr20 = init_wallet
 
 (* Total token count *)
 field blocks_for_rewards: BNum = BNum 2160
-field rewards: Uint128 = Uint128 191203703703703
+field rewards: Uint128 = Uint128 1902587519025926
 field token_holder: Map Uint256 Int256 = Emp Uint256 Int256
 
 field lvl_up: ByStr20 = zero_address
