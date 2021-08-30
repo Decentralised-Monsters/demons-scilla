@@ -26,6 +26,7 @@ Contracts:
 1. Update claim distributor - lvl up address `SetLvlUp(lvlup_addr)`
 1. Add demon image URI in crowd sale contract, `AddReserveList(['image_uri_666', 'image_uri_665', '664'])` in **reverse order**
 1. Invoke demons contract, `ConfigureMinter(crowd_sale)`, `ConfigureMinter(lvl_up)` and `ConfigureMinter(name_change)`
+1. As the `wallet` defined in the crowd sale contract, call `IncreaseAllowance(crowd_sale, amt)` to allow crowd sale contract to distribute the buy incentives (DMZ) from `wallet`.
 
 ## Maintenance
 1. Transfer some DMZ periodically to claim distributor contract for the claim rewards.

@@ -83,6 +83,7 @@ contract LineCurvedDistributor
 (
   contract_owner: ByStr20,
   init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_id_count: Uint256
   end
@@ -91,7 +92,7 @@ contract LineCurvedDistributor
 (* Mutable fields *)
 field owner: ByStr20 = contract_owner
 field pending_owner: Option ByStr20 = None {ByStr20}
-
+field dmz: ByStr20 = init_dmz
 field wallet: ByStr20 = init_wallet
 
 (* Total token count *)
@@ -101,6 +102,7 @@ field total: Uint256 = zero256
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
 field decimal: Uint256 = Uint256 26
 field price: Uint256 = Uint256 3000000000000000
+field buy_incentive: Uint128 = Uint128 200000000000000000000
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -181,6 +183,20 @@ procedure AddReserve(uri: String)
   reserve := new_count_reserve
 end
 
+procedure CallTransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
+  dmz_o <- dmz;
+  call_transfer_from = {
+    _tag: "TransferFrom";
+    _recipient: dmz_o;
+    _amount: Uint128 0;
+    from: from;
+    to: to;
+    amount: amount
+  };
+  msgs = one_msg call_transfer_from;
+  send msgs
+end
+
 (* @dev Updates the token image uri list; used by contract owner. *)
 (* @param token_uris_list: image URI list in REVERSE order, 20.jpg, 19.jpg...01.jpg *)
 transition AddReserveList(token_uris_list: List String)
@@ -224,11 +240,13 @@ transition Buy()
   | False =>
     accept;
 
+    comm_wallet <- wallet;
+    incentive <- buy_incentive;
+
     change = change_of_coins count price_amount _amount;
-
     AddFunds _sender change;
-
-    Minting _sender
+    Minting _sender;
+    CallTransferFrom incentive comm_wallet _sender
   end
 end
 
@@ -236,6 +254,14 @@ transition TransferZilsToWallet()
   bal <- _balance;
   wallet_o <- wallet;
   AddFunds wallet_o bal
+end
+
+(* @dev Updates the dmz contract address; used only by contract owner *)
+transition UpdateDMZ(new_dmz: ByStr20)
+  IsContractOwner;
+  dmz := new_dmz;
+  e = {_eventname: "UpdateDMZ"; new_dmz: new_dmz};
+  event e
 end
 
 (* @dev Updates the wallet contract address; used only by contract owner *)
@@ -289,5 +315,9 @@ transition MintCallBack(recipient: ByStr20, token_id: Uint256, token_uri: String
   new_count <-& main.token_id_count;
 
   total := new_count
+end
+
+(* Buy -> Minting -> CallTransferFrom *)
+transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
 (* callbacks *)
