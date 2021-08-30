@@ -13,6 +13,9 @@ Contract to track if demons are generating rewards and allow users to claim.
  * - address (ByStr20) - LvlUp contract address.
  * **UpdateDMZ** - A admin transition to update the dmz contract address.
 * - new_dmz (ByStr20) - The new dmz contract address.
+* **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
+* - new_owner (ByStr20) - new owner address
+* **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
 
 ## Users Transitions
 ```Ocaml
@@ -27,6 +30,8 @@ contract DMZClaimContract
   SetLvlUp(address: ByStr20)
   SetRewards(blocks: BNum, rewards_amount: Uint128)
   UpdateDMZ(new_dmz: ByStr20)
+  RequestOwnershipTransfer(new_owner: ByStr20)
+  ConfirmOwnershipTransfer()
 ```
 
 ## Callbacks
@@ -74,6 +79,8 @@ contract DMZClaimLib
 ```
 
 ## Mutable fields
+ * owner - current contract owner
+ * pending_owner - new to-be contract owner
  * dmz - Tracks the current dmz contract.
  * blocks_for_rewards - Minimum blocks for get rewards.
  * rewards - Amount of rewards.
@@ -82,6 +89,8 @@ contract DMZClaimLib
 
 ```Ocaml
 contract DMZClaimContract
+  field owner: ByStr20 = contract_owner
+  field pending_owner: Option ByStr20 = None {ByStr20}
   field dmz: ByStr20 = init_dmz
   field blocks_for_rewards: BNum = BNum 5000
   field rewards: Uint128 = Uint128 4000000000000000
