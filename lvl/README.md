@@ -15,7 +15,9 @@
  * - new_wallet (ByStr20) - The new wallet address.
  * **UpdateDistributor** - A owner transition to update the distributor contract address.
  * - new_distributor (ByStr20) - The new distributor address.
-
+ * **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
+ * - new_owner (ByStr20) - new owner address
+ * **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
 
 ## Users Transitions
 ```Ocaml
@@ -32,6 +34,8 @@ contract LVLUpContract
   UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
   UpdateDistributor(new_distributor: ByStr20)
+  RequestOwnershipTransfer(new_owner: ByStr20)
+  ConfirmOwnershipTransfer()
 ```
 
 ## Callbacks
@@ -78,6 +82,8 @@ contract DMZClaimLib
 ```
 
 ## Mutable Fields
+ * owner - current contract owner
+ * pending_owner - new to-be contract owner
  * dmz - Tracks the current dmz contract
  * wallet - Tracks the current wallet to receive the commission
  * distributor - Tracks the current distributor address to invoke the reward mechanism
@@ -87,6 +93,8 @@ contract DMZClaimLib
 
 ```Ocaml
 contract LVLUpContract
+  field owner: ByStr20 = contract_owner
+  field pending_owner: Option ByStr20 = None {ByStr20}
   field dmz: ByStr20 = init_dmz
   field wallet: ByStr20 = init_wallet
   field distributor: ByStr20 = init_distributor
