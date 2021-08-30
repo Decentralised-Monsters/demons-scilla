@@ -2,9 +2,18 @@
 
 The crowd sale contract contains the buy mechanism that will mint the demon. It uses a line-step curve formula to compute the price of each demon.
 
+ * **Buy** - Buy a demon. The demon will be minted by demon contract.
  * **AddReserveList** - An owner transition to update the list of token image uri. Image URI must be uploaded in reverse. E.g. start from 10.jpg, 09.jpg ... 01.jpg.
  * - token_uris_list (List String) - The list of demon image URIs, separated by commas in square brakcets, e.g. ["http://cloud/image/20.jpg", "http://cloud/image/19.jpg"...]
- * **ChangePrice**
+ * **ChangePrice** - An owner transition to change the starting selling price.
+ * - value (Uint256) - new starting price
+ * **ChangeDecimal** - An owner transition to change the constant factor in the line curve formula.
+ * - value (Uint256) - new constant factor
+ * **UpdateWallet** - A owner transition to update the wallet address.
+ * - new_wallet (ByStr20) - The new wallet address.
+ * **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
+ * - new_owner (ByStr20) - new owner address
+ * **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
 
 ## Users Transitions
 ```Ocaml
@@ -19,6 +28,8 @@ contract LineCurvedDistributor
   ChangePrice(value: Uint256)
   ChangeDecimal(value: Uint256)
   UpdateWallet(new_wallet: ByStr20)
+  RequestOwnershipTransfer(new_owner: ByStr20)
+  ConfirmOwnershipTransfer()
 ```
 
 ## Callbacks
@@ -61,6 +72,8 @@ contract LineCurvedDistributor
 ```
 
 ## Mutable Fields
+  * owner - current contract owner
+  * pending_owner - new to-be contract owner
   * wallet - Tracks the current wallet to transfer dmz
   * reserve - Tracks the available demons to buy
   * total - Tracks the total demons minted so far
@@ -70,6 +83,9 @@ contract LineCurvedDistributor
 
 ```Ocaml
 contract LineCurvedDistributor
+  field owner: ByStr20 = contract_owner
+  field pending_owner: Option ByStr20 = None {ByStr20}
+
   field wallet: ByStr20 = init_wallet
 
   field reserve: Uint256 = zero256

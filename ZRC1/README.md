@@ -30,6 +30,9 @@
  * **SetImageURI** - Owner only transition to change the demon image uri.
  * - token_id (Uint256) - Demon token id to change the image uri.
  * - new_uri (String) - new image uri.
+ * **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
+ * - new_owner (ByStr20) - new owner address
+ * **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
 
 ## Users Transitions
 ```Ocaml
@@ -55,6 +58,8 @@ contract Demons
 contract Demons
   ConfigureMinter(minter: ByStr20)
   SetImageURI(token_id: Uint256, new_uri: String)
+  RequestOwnershipTransfer(new_owner: ByStr20)
+  ConfirmOwnershipTransfer()
 ``` 
 
 ## Constructor
@@ -101,6 +106,8 @@ contract Demons
 ```
 
 ## Mutable Fields
+  * owner - current contract owner
+  * pending_owner - new to-be contract owner
   * minters - mapping of approved minters
   * token_owners - mapping of `token_id` -> `token_owner`
   * token_name - mapping of `token_id` -> `demon_name`
@@ -114,6 +121,9 @@ contract Demons
 
 ```Ocaml
 contract Demons
+  field owner: ByStr20 = contract_owner
+  field pending_owner: Option ByStr20 = None {ByStr20}
+  
   field minters: Map ByStr20 Dummy =
     let emp_map = Emp ByStr20 Dummy in
     builtin put emp_map contract_owner verdad

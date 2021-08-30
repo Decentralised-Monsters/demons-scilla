@@ -30,7 +30,9 @@ Contracts:
 ## Maintenance
 1. Transfer some DMZ periodically to claim distributor contract for the claim rewards.
 
-
+## Ownership Transfer
+If ownership is transferred, the following have to be updated:
+1. Demons contract, call `ConfigureMinter` to remove previous owner and add new owner as minter.
 
 ### 1: [Deploy Main ZRC1 contract:](https://github.com/hicaru/demons-scilla/blob/master/ZRC1/nft-demons.scilla)
 

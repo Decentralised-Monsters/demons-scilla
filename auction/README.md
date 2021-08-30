@@ -26,7 +26,10 @@ Our auction contract will have a simple interface that allows users to place bid
  * - new_min_auction_price (Uint128) - The new minimum auction price.
  * **UpdateMinIncrement** - A owner transition to update the minimum increment rate required when users create an auction.
  * - new_min_increment (Uint128) - The new minimum increment rate in percentage.
-* **UpdatePause** - A owner transition to pause / unpause the contract.
+ * **UpdatePause** - A owner transition to pause / unpause the contract.
+ * **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
+ * - new_owner (ByStr20) - new owner address
+ * **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
 
 ## Users Transitions
 ```Ocaml
@@ -47,6 +50,8 @@ contract AuctionFactory
   UpdateMinAuctionPrice(new_min_auction_price: Uint128)
   UpdateMinIncrement(new_min_increment: Uint128)
   UpdatePause()
+  RequestOwnershipTransfer(new_owner: ByStr20)
+  ConfirmOwnershipTransfer()
 ```
 
 ## Callbacks
@@ -135,7 +140,7 @@ bid_increment = 10%
  * CodeNotStartedYet - If the `start_block` < `current_block_number`
  * CodeAlreadyCanceled - If auction was canceled by owner.
  * CodeTimeOut - If `end_block` < `current_block_number`
- * CodeIsOwner - If `_sender` is not owner of auction.
+ * CodeIsAuctionOwner - If `_sender` is not owner of auction.
  * CodeBidLessThanCurrent - if `_amount` < `highest_binding_bid`
  * CodeNotFound - If id of auction doesn't found.
  * CodeIsOwner - If invoker is `token_id` owner.
@@ -162,7 +167,7 @@ contract AuctionFactoryLib
     | CodeTimeOut                      => Int32 -5
     | CodeBidLessThanCurrent           => Int32 -6
     | CodeNotFound                     => Int32 -7
-    | CodeIsOwner                      => Int32 -8
+    | CodeIsAuctionOwner               => Int32 -8
     | CodeNotEndedOrCanceled           => Int32 -9
     | CodeOnlyWithdrawn                => Int32 -10
     | CodeNotTokenOwner                => Int32 -11
@@ -179,6 +184,8 @@ contract AuctionFactoryLib
 
 
 ## Mutable Fields
+ * owner - current contract owner
+ * pending_owner - new to-be contract owner
  * dmz - Tracks the current dmz contract
  * wallet - Tracks the current wallet to receive the commission
  * direct_listing - Tracks the current marketplace contract
@@ -194,6 +201,8 @@ contract AuctionFactoryLib
 
 ```Ocaml
 contract AuctionFactory
+  field owner: ByStr20 = contract_owner
+  field pending_owner: Option ByStr20 = None {ByStr20}
   field dmz: ByStr20 = init_dmz
   field wallet: ByStr20 = init_wallet
 

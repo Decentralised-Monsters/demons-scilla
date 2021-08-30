@@ -13,6 +13,9 @@ The name change contract checks for minimum level required before allowing users
  * - new_dmz (ByStr20) - The new dmz contract address.
  * **UpdateWallet** - A owner transition to update the wallet address.
  * - new_wallet (ByStr20) - The new wallet address.
+ * **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
+ * - new_owner (ByStr20) - new owner address
+ * **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
 
 ## Users Transitions
 ```Ocaml
@@ -27,6 +30,8 @@ contract NameContract
   ChangePrice(value: Uint128)
   UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
+  RequestOwnershipTransfer(new_owner: ByStr20)
+  ConfirmOwnershipTransfer()
 ```
 
 ## Callbacks
@@ -74,6 +79,8 @@ contract NameContract
 ```
 
 ## Mutable fields
+ * owner - current contract owner
+ * pending_owner - new to-be contract owner
  * dmz - Tracks the current dmz contract
  * wallet - Tracks the current wallet to receive dmz
  * min_lvl_for_change - The min lvl for token.
@@ -81,6 +88,8 @@ contract NameContract
 
 ```Ocaml
 contract NameContract
+  field owner: ByStr20 = contract_owner
+  field pending_owner: Option ByStr20 = None {ByStr20}
   field dmz: ByStr20 = init_dmz
   field wallet: ByStr20 = init_wallet
   field min_lvl_for_change: Uint32 = Uint32 5

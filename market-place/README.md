@@ -20,6 +20,9 @@ The marketplace contract deals with NFTs that are sold at a fixed price. For NFT
  * - new_dmz (ByStr20) - The new dmz contract address.
  * **UpdateWallet** - Allows contract owner to update wallet address for receiving the commission.
  * - new_wallet (ByStr20) - The new wallet address.
+ * **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
+ * - new_owner (ByStr20) - new owner address
+ * **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
 
 ## Users Transitions
 ```Ocaml
@@ -38,6 +41,8 @@ contract MarketPlace
   UpdateAuctionListing(new_auction: ByStr20 with contract field token_auctions: Map Uint256 Uint256 end)
   UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
+  RequestOwnershipTransfer(new_owner: ByStr20)
+  ConfirmOwnershipTransfer()
 ```
 
 ## Callbacks
@@ -95,6 +100,8 @@ contract MarketPlace
 ```
 
 ## Mutable Fields
+ * owner - current contract owner
+ * pending_owner - new to-be contract owner
  * dmz - Tracks the current dmz contract
  * wallet - Tracks the current wallet to receive the commission
  * auction_listing - Tracks the auction contract
@@ -106,6 +113,9 @@ contract MarketPlace
 
 ```Ocaml
 contract MarketPlace
+  field owner: ByStr20 = contract_owner
+  field pending_owner: Option ByStr20 = None {ByStr20}
+  
   field dmz: ByStr20 = init_dmz
   field wallet: ByStr20 = init_wallet
 
