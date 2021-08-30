@@ -71,6 +71,7 @@ let get_claim_value =
 contract DMZClaimContract
 (
   contract_owner: ByStr20,
+  init_wallet: ByStr20,
   init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_lvl: Map Uint256 Uint32,
@@ -82,6 +83,7 @@ contract DMZClaimContract
 field owner: ByStr20 = contract_owner
 field pending_owner: Option ByStr20 = None {ByStr20}
 field dmz: ByStr20 = init_dmz
+field wallet: ByStr20 = init_wallet
 
 (* Total token count *)
 field blocks_for_rewards: BNum = BNum 2160
@@ -163,16 +165,17 @@ procedure OnlyTokenOwner(token_id: Uint256)
   end
 end
 
-procedure CallTransfer(to: ByStr20, amount: Uint128)
+procedure CallTransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
   dmz_o <- dmz;
-  msg_transfer = {
-    _tag: "Transfer";
+  call_transfer_from = {
+    _tag: "TransferFrom";
     _recipient: dmz_o;
-    _amount: zero128;
+    _amount: Uint128 0;
+    from: from;
     to: to;
     amount: amount
   };
-  msgs = one_msg msg_transfer;
+  msgs = one_msg call_transfer_from;
   send msgs
 end
 
@@ -209,7 +212,8 @@ transition Claim(token_id: Uint256)
     amount = get_claim_value block_number acumulated rewards_amount;
 
     token_holder[token_id] := block_number;
-    CallTransfer _sender amount
+    comm_wallet <- wallet;
+    CallTransferFrom amount comm_wallet _sender
   | None =>
     err = CodeNotFound;
     ThrowError err
@@ -254,6 +258,14 @@ transition UpdateDMZ(new_dmz: ByStr20)
   event e
 end
 
+(* @dev Updates the wallet contract address; used only by contract owner *)
+transition UpdateWallet(new_wallet: ByStr20)
+  OnlyAdmin;
+  wallet := new_wallet;
+  e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
+  event e
+end
+
 (* @dev: Sets a new contract owner; used by contract owner only. *)
 (* Current owner can abort the process by calling this transition with their own address *)
 (* @param: new_owner New owner address *)
@@ -290,8 +302,5 @@ transition ConfirmOwnershipTransfer()
 end
 
 (* callbacks *)
-transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
-end
-
-transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end

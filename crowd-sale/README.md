@@ -44,7 +44,7 @@ contract LineCurvedDistributor
 ## Constructor
 
   * contract_owner - Admin of contract.
-  * init_wallet - A wallet for storing rewards or transfer dmz to users when they buy demon
+  * init_wallet - A wallet for transferring incentive dmz to users when they buy demon
   * init_dmz - the main ZRC2 token address.
   * main - The Main NFT token address.
 
@@ -52,8 +52,8 @@ contract LineCurvedDistributor
 contract LineCurvedDistributor
 (
   contract_owner: ByStr20,
-  init_dmz: ByStr20,
   init_wallet: ByStr20,
+  init_dmz: ByStr20,
   main: ByStr20 with contract
     field token_id_count: Uint256
   end
