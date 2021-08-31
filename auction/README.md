@@ -156,6 +156,7 @@ bid_increment = 10%
  * CodePriceLessThanRequired - If user sets a price that is less than `min_auction_price`.
  * CodePauseNotPause - If the check paused or unpaused fails.
  * CodeInputOutOfRange - If the input increment or price is out of range.
+ * CodeWithdrawNoBid - If users invoke `Withdraw` on an auction without any bids.
 
 ```Ocaml
 contract AuctionFactoryLib
@@ -180,6 +181,7 @@ contract AuctionFactoryLib
     | CodePriceLessThanRequired        => Int32 -18
     | CodePauseNotPause                => Int32 -19 
     | CodeInputOutOfRange              => Int32 -20
+    | CodeWithdrawNoBid                => Int32 -21
 ```
 
 
