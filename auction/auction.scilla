@@ -46,6 +46,7 @@ let max_dmz = Uint128 16666660000000000000000000
 let zero256 = Uint256 0
 let zero128 = Uint128 0
 let zero64 = Uint64 0
+let zero32 = Uint32 0
 
 let one_hundred128 = Uint128 100
 let one256 = Uint256 1
@@ -176,6 +177,10 @@ let muldiv : Uint128 -> Uint128 -> Uint128 -> Uint128 =
         res128
       end
 
+let is_bid_map_empty =
+  fun(m : Map Uint256 Uint128) =>
+    let map_size = builtin size m in
+    builtin eq map_size zero32
 
 (***************************************************)
 (*             The contract definition             *)
@@ -496,6 +501,27 @@ procedure DeleteAuction(id: Uint256)
   end
 end
 
+(* check if can remove the entry funds_by_bidder[bidder] to prevent empty maps *)
+procedure DeleteFundsByBidder(bidder: ByStr20, auction_id: Uint256)
+  delete funds_by_bidder[bidder][auction_id];
+  bid_map <- funds_by_bidder[bidder];
+
+  match bid_map with
+  | Some bid_entry =>
+    is_map_empty = is_bid_map_empty bid_entry;
+    
+    match is_map_empty with
+    | True =>
+      (* bidder has no other bids after deletion, can remove entire map *)
+      delete funds_by_bidder[bidder]
+    | False =>
+      (* bidder has bid on other auctions, do nothing *)
+    end
+  | None =>
+    (* bidder has not bidder, do nothing *)
+  end
+end
+
 
 procedure UpdateCounter(id: Uint256, op: Operation)
   some_bid_count <- bid_count[id];
@@ -555,7 +581,7 @@ procedure ReturnFunds(id: Uint256, to: ByStr20)
 
   match some_amount with
   | Some amount =>
-    delete funds_by_bidder[to][id];
+    DeleteFundsByBidder to id;
     CallTransferDMZ to amount
   | None =>
   end
@@ -847,7 +873,7 @@ transition Withdraw(id: Uint256)
               com = muldiv dev_commission highest_binding_bid one_hundred128;
               value = builtin sub highest_binding_bid com;
   
-              delete funds_by_bidder[highest_bidder][id];
+              DeleteFundsByBidder highest_bidder id;
   
               wallet_o <- wallet;
               CallTransferDMZ highest_bidder extra;
@@ -868,7 +894,7 @@ transition Withdraw(id: Uint256)
               (* user did not win bid; refund back locked up DMZ *)
               ReturnFunds id _sender;
               DeleteAuction id;
-              delete funds_by_bidder[_sender][id]
+              DeleteFundsByBidder _sender id
             end
           end
         end
