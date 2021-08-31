@@ -64,7 +64,7 @@ field pending_owner: Option ByStr20 = None {ByStr20}
 field dmz: ByStr20 = init_dmz
 field wallet: ByStr20 = init_wallet
 field min_lvl_for_change: Uint32 = Uint32 5
-field price_for_change: Uint128 = Uint128 100000000000000000000
+field price_for_change: Uint128 = Uint128 250000000000000000000
 
 procedure ThrowError(err : Error)
   e = make_error err;
