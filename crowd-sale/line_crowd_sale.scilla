@@ -250,7 +250,9 @@ transition Buy()
   end
 end
 
-transition TransferZilsToWallet()
+(* @dev Drain contract balance to comm wallet; used only by contract owner *)
+transition DrainContractBalance()
+  IsContractOwner;
   bal <- _balance;
   wallet_o <- wallet;
   AddFunds wallet_o bal

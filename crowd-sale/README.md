@@ -9,6 +9,7 @@ The crowd sale contract contains the buy mechanism that will mint the demon. It 
  * - value (Uint256) - new starting price
  * **ChangeDecimal** - An owner transition to change the constant factor in the line curve formula.
  * - value (Uint256) - new constant factor
+ * **DrainContractBalance** - An owner transition to transfer the ZIL balance from the demon sales to `wallet`.
  * **UpdateDMZ** - A owner transition to update the dmz contract address.
  * - new_dmz (ByStr20) - The new dmz contract address.
  * **UpdateWallet** - A owner transition to update the wallet address.
@@ -29,6 +30,7 @@ contract LineCurvedDistributor
   AddReserveList(token_uris_list: List String)
   ChangePrice(value: Uint256)
   ChangeDecimal(value: Uint256)
+  DrainContractBalance()
   UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
   RequestOwnershipTransfer(new_owner: ByStr20)
