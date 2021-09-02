@@ -30,7 +30,7 @@ Contracts:
 1. As the `wallet` defined in the claim distributor contract, call `IncreaseAllowance(claim, amt)` to allow the claim distributor to transfer the rewards from `wallet`.
 
 ## Maintenance
-1. Transfer some DMZ periodically to claim distributor contract for the claim rewards.
+
 
 ## Ownership Transfer
 If ownership is transferred, the following have to be updated:
