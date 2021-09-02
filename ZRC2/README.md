@@ -6,13 +6,16 @@
  * **DecreaseAllowance** - Decrease allowance of a `spender`. Reduce the `amount` the `spender` can utilize from `_sender` wallet.
  * - spender (ByStr20) - spender address
  * - amount (Uint128) - token amount that `spender` can use
-* **Transfer** - Transfer DMZ to a recipient.
+ * **Transfer** - Transfer DMZ to a recipient.
  * - to (ByStr20) - recipient address
  * - amount (Uint128) - amount of DMZ to send to recipient
  * **TransferFrom** - Transfer DMZ from `from` address to `to` address. `IncreaseAllowance` is required for `from` address.
  * - from (ByStr20) - DMZ to transferred from
  * - to (ByStr20) - DMZ to transferred to
  * - amount (Uint128) - amount of DMZ to send to `to` address
+ * **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
+ * - new_owner (ByStr20) - new owner address
+ * **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
 
 ## Users Transitions
 ```Ocaml
@@ -21,6 +24,13 @@ contract DMZToken
   DecreaseAllowance(spender: ByStr20, amount: Uint128)
   Transfer(to: ByStr20, amount: Uint128)
   TransferFrom(from: ByStr20, to: ByStr20, amount: Uint128)
+```
+
+## Owner Transitions
+```Ocaml
+contract DMZToken
+  RequestOwnershipTransfer(new_owner: ByStr20)
+  ConfirmOwnershipTransfer()
 ```
 
 ## Callbacks
@@ -66,12 +76,17 @@ contract DMZToken
 ```
 
 ## Mutable Fields
+  * owner - current contract owner
+  * pending_owner - new to-be contract owner
   * total_supply - total supply of the DMZ
   * balances - mapping of DMZ balances: `address` -> `DMZ`
   * allowances - mapping of DMZ allowance: `address` -> `DMZ`
 
 ```Ocaml
 contract DMZToken
+  field owner: ByStr20 = contract_owner
+  field pending_owner: Option ByStr20 = None {ByStr20}
+  
   field total_supply : Uint128 = init_supply
 
   field balances: Map ByStr20 Uint128 
