@@ -10,6 +10,7 @@ The crowd sale contract contains the buy mechanism that will mint the demon. It 
  * **ChangeDecimal** - An owner transition to change the constant factor in the line curve formula.
  * - value (Uint256) - new constant factor
  * **DrainContractBalance** - An owner transition to transfer the ZIL balance from the demon sales to `wallet`.
+ * **UpdatePause** - Allows contract owner to pause/unpause the contract.
  * **UpdateDMZ** - A owner transition to update the dmz contract address.
  * - new_dmz (ByStr20) - The new dmz contract address.
  * **UpdateWallet** - A owner transition to update the wallet address.
@@ -31,6 +32,7 @@ contract LineCurvedDistributor
   ChangePrice(value: Uint256)
   ChangeDecimal(value: Uint256)
   DrainContractBalance()
+  UpdatePause()
   UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
   RequestOwnershipTransfer(new_owner: ByStr20)
@@ -68,6 +70,7 @@ contract LineCurvedDistributor
   * CodeInsufficientFunds - If users do not have sufficient funds when buying demons.
   * CodeNotContractOwner - If transition is not invoked by contract owner.
   * CodeNotFound - If something is not found.
+  * CodePauseNotPause - If contract is paused or unpaused.
 
 ```Ocaml
 contract LineCurvedDistributor
@@ -76,6 +79,7 @@ contract LineCurvedDistributor
     | CodeInsufficientFunds => Int32 -2
     | CodeNotContractOwner  => Int32 -3
     | CodeNotFound          => Int32 -4
+    | CodePauseNotPause     => Int32 -5
 ```
 
 ## Mutable Fields
@@ -89,6 +93,7 @@ contract LineCurvedDistributor
   * decimal - constant factor to compute the buy price
   * price - starting demon price
   * buy_incentive - DMZ rewards issued when users buy a demon
+  * pause - Tracks if the cotnract is paused/unpaused
 
 ```Ocaml
 contract LineCurvedDistributor
@@ -97,7 +102,7 @@ contract LineCurvedDistributor
 
   field dmz: ByStr20 = init_dmz
   field wallet: ByStr20 = init_wallet
-
+  field pause: Uint32 = on_pause
   field reserve: Uint256 = zero256
   field total: Uint256 = zero256
 

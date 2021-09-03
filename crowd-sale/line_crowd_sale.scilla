@@ -11,7 +11,10 @@ type Error =
   | CodeInsufficientFunds
   | CodeNotContractOwner
   | CodeNotFound
+  | CodePauseNotPause
 
+let not_pause = Uint32 0
+let on_pause = Uint32 1
 let zero256 = Uint256 0
 let zero128 = Uint128 0
 let one256 = Uint256 1
@@ -30,6 +33,7 @@ let make_error =
       | CodeInsufficientFunds => Int32 -2
       | CodeNotContractOwner  => Int32 -3
       | CodeNotFound          => Int32 -4
+      | CodePauseNotPause     => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
@@ -94,6 +98,7 @@ field owner: ByStr20 = contract_owner
 field pending_owner: Option ByStr20 = None {ByStr20}
 field dmz: ByStr20 = init_dmz
 field wallet: ByStr20 = init_wallet
+field pause: Uint32 = on_pause
 
 (* Total token count *)
 field reserve: Uint256 = zero256
@@ -145,6 +150,17 @@ procedure AddFunds(recipient: ByStr20, amount: Uint128)
     msgs = one_msg msg;
     send msgs
   | True =>
+  end
+end
+
+procedure CheckPause(expected: Uint32)
+  curent_pause <- pause;
+  is_eq = builtin eq expected curent_pause;
+  match is_eq with
+  | True =>
+  | False =>
+    err = CodePauseNotPause;
+    ThrowError err
   end
 end
 
@@ -223,8 +239,10 @@ transition ChangeDecimal(value: Uint256)
 end
 
 (* @dev Buy a demon with ZILs. *)
+(* contract must be unpaused first *)
 (* Price of demon is set by math model. Users will get refund if they pay more than necessary. *)
 transition Buy()
+  CheckPause not_pause;
   total_supply <- total;
   decimal_value <- decimal;
   price_value <- price;
@@ -256,6 +274,22 @@ transition DrainContractBalance()
   bal <- _balance;
   wallet_o <- wallet;
   AddFunds wallet_o bal
+end
+
+(* @dev Pause or unpause the contract; used only by contract owner *)
+transition UpdatePause()
+  IsContractOwner;
+  status <- pause;
+  is_pause = builtin eq status on_pause;
+  match is_pause with
+  | True =>
+    pause := not_pause
+  | False =>
+    pause := on_pause
+  end;
+  updated_pause <- pause;
+  e = {_eventname : "UpdatePause"; pause: updated_pause};
+  event e
 end
 
 (* @dev Updates the dmz contract address; used only by contract owner *)
