@@ -9,17 +9,19 @@ const fs = require('fs');
 async function main() {
     const myArgs = process.argv.slice(2);
 
-    if (myArgs.length < 4) {
+    if (myArgs.length < 5) {
         console.error("Wrong arguments");
-        console.log("node deploy-levelup.js [private_key] [0x_dmz_addr] [0x_distributor_addr] [0x_demon_addr]");
+        console.log("node deploy-levelup.js [private_key] [0x_wallet] [0x_dmz_addr] [0x_distributor_addr] [0x_demon_addr]");
         return;
     }
 
     const privateKey = myArgs[0];
-    const dmz = myArgs[1];
-    const distributor = myArgs[2]
-    const demon = myArgs[3];
+    const commWallet = myArgs[1];
+    const dmz = myArgs[2];
+    const distributor = myArgs[3]
+    const demon = myArgs[4];
 
+    console.log("commWallet: ", commWallet);
     console.log("dmz: ", dmz);
     console.log("distributor: ", distributor);
     console.log("demon: ", demon);
@@ -51,7 +53,7 @@ async function main() {
             {
                 vname: 'init_wallet',
                 type: 'ByStr20',
-                value: `${dmz}`,
+                value: `${commWallet}`,
             },
             {
                 vname: 'init_dmz',
