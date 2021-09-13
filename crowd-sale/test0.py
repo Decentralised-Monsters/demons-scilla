@@ -10,7 +10,7 @@ reserve = 100
 total_supply = 0
 
 def buy():
-  return ((total_supply // 26) + 1) * 4000
+  return ((total_supply // 25) + 1) * 3000
 
 
 prices = []

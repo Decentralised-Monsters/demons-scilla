@@ -105,7 +105,7 @@ field reserve: Uint256 = zero256
 field total: Uint256 = zero256
 
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
-field decimal: Uint256 = Uint256 26
+field decimal: Uint256 = Uint256 25
 field price: Uint256 = Uint256 3000000000000000
 field buy_incentive: Uint128 = Uint128 200000000000000000000
 
