@@ -11,6 +11,7 @@ Contract to track if demons are generating rewards and allow users to claim.
  * - rewards_amount (Uint128) - Amount of rewards per `blocks`
  * **SetLvlUp** - Change the LvlUp contract.
  * - address (ByStr20) - LvlUp contract address.
+ * **UpdatePause** - Allows contract owner to pause/unpause the contract.
  * **UpdateDMZ** - A admin transition to update the dmz contract address.
  * - new_dmz (ByStr20) - The new dmz contract address.
  * **UpdateWallet** - A owner transition to update the wallet address.
@@ -31,6 +32,7 @@ contract DMZClaimContract
 contract DMZClaimContract
   SetLvlUp(address: ByStr20)
   SetRewards(blocks: BNum, rewards_amount: Uint128)
+  UpdatePause()
   UpdateDMZ(new_dmz: ByStr20)
   UpdateWallet(new_wallet: ByStr20)
   RequestOwnershipTransfer(new_owner: ByStr20)
@@ -71,6 +73,7 @@ contract DMZClaimContract
  * CodeTokenHolderAlreadyExists - If token already is generating rewards.
  * CodeNotTokenOwner - If `_sender` is not token owner.
  * CodeInputOutOfRange - If input if out of range.
+ * CodePauseNotPause - If contract is paused or unpaused.
 
 ```Ocaml
 contract DMZClaimLib
@@ -81,6 +84,7 @@ contract DMZClaimLib
     | CodeTokenHolderAlreadyExists     => Int32 -4
     | CodeNotTokenOwner                => Int32 -5
     | CodeInputOutOfRange              => Int32 -6
+    | CodePauseNotPause                => Int32 -7
 ```
 
 ## Mutable fields
@@ -88,6 +92,7 @@ contract DMZClaimLib
  * pending_owner - new to-be contract owner
  * dmz - Tracks the current dmz contract.
  * wallet - Tracks the current wallet to transfer dmz
+ * pause - Tracks if the cotnract is paused/unpaused
  * blocks_for_rewards - Minimum blocks for get rewards.
  * rewards - Amount of rewards.
  * token_holder - Stores the blocknumber for acumulate rewards.
@@ -99,6 +104,7 @@ contract DMZClaimContract
   field pending_owner: Option ByStr20 = None {ByStr20}
   field dmz: ByStr20 = init_dmz
   field wallet: ByStr20 = init_wallet
+  field pause: Uint32 = not_pause
   field blocks_for_rewards: BNum = BNum 5000
   field rewards: Uint128 = Uint128 4000000000000000
   field token_holder: Map Uint256 Int256 = Emp Uint256 Int256

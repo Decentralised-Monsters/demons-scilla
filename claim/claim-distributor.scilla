@@ -15,7 +15,10 @@ type Error =
   | CodeTokenHolderAlreadyExists
   | CodeNotTokenOwner
   | CodeInputOutOfRange
+  | CodePauseNotPause
 
+let not_pause = Uint32 0
+let on_pause = Uint32 1
 let zero256 = Uint256 0
 let zero128 = Uint128 0
 let zero32 = Uint32 0
@@ -38,6 +41,7 @@ let make_error =
       | CodeTokenHolderAlreadyExists     => Int32 -4
       | CodeNotTokenOwner                => Int32 -5
       | CodeInputOutOfRange              => Int32 -6
+      | CodePauseNotPause                => Int32 -7
       end
     in
     { _exception : "Error"; code : result_code }
@@ -84,6 +88,7 @@ field owner: ByStr20 = contract_owner
 field pending_owner: Option ByStr20 = None {ByStr20}
 field dmz: ByStr20 = init_dmz
 field wallet: ByStr20 = init_wallet
+field pause: Uint32 = not_pause
 
 (* Total token count *)
 field blocks_for_rewards: BNum = BNum 2160
@@ -107,6 +112,17 @@ procedure CheckNumRange(number: Uint32)
   | True =>
   | False =>
     err = CodeInputOutOfRange;
+    ThrowError err
+  end
+end
+
+procedure CheckPause(expected: Uint32)
+  curent_pause <- pause;
+  is_eq = builtin eq expected curent_pause;
+  match is_eq with
+  | True =>
+  | False =>
+    err = CodePauseNotPause;
     ThrowError err
   end
 end
@@ -182,6 +198,7 @@ end
 (* @dev Initiate the reward process; used only by LvlUp contract *)
 (* @param token_id: Demon token id *)
 transition OnBeginReward(token_id: Uint256)
+  CheckPause not_pause;
   OnlyLvlUp;
   OnlyTokenHolderNotExists token_id;
 
@@ -200,6 +217,7 @@ end
 (* Demons would only begin generating rewards if they are above a certain level, see lvl/lvl_up.scilla - Upgrade() for more info *)
 (* @param token_id: Demon token id *)
 transition Claim(token_id: Uint256)
+  CheckPause not_pause;
   OnlyTokenOwner token_id;
 
   current_block <-& BLOCKNUMBER;
@@ -247,6 +265,22 @@ transition SetRewards(blocks: BNum, rewards_amount: Uint128)
     blocks: blocks;
     rewards: rewards_amount
   };
+  event e
+end
+
+(* @dev Pause or unpause the contract; used only by contract owner *)
+transition UpdatePause()
+  OnlyAdmin;
+  status <- pause;
+  is_pause = builtin eq status on_pause;
+  match is_pause with
+  | True =>
+    pause := not_pause
+  | False =>
+    pause := on_pause
+  end;
+  updated_pause <- pause;
+  e = {_eventname : "UpdatePause"; pause: updated_pause};
   event e
 end
 
