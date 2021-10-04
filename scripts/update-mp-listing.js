@@ -11,20 +11,27 @@ const { Zilliqa } = require('@zilliqa-js/zilliqa');
 async function main() {
     const myArgs = process.argv.slice(2);
 
-    if (myArgs.length < 3) {
+    if (myArgs.length < 4) {
         console.error("Wrong arguments\n");
-        console.log("node update-mp-listing.js [private_key] [0x_auction_addr] [0x_marketplace_addr]");
+        console.log("node update-mp-listing.js [private_key] [0x_auction_addr] [0x_marketplace_addr] [testnet / mainnet]");
         return;
     }
 
+    let api = 'https://dev-api.zilliqa.com';
     const privateKey = myArgs[0];
     const auction = myArgs[1]           //0xbase16
     const marketplace = myArgs[2];      // 0xbase16
+    const network = myArgs[3];
+
+    if (network === 'mainnet') {
+        api = 'https://api.zilliqa.com';
+    }
 
     console.log("auction: ", auction);
     console.log("updated marketplace: ", marketplace);
+    console.log("network: ", api);
 
-    const zilliqa = new Zilliqa('https://dev-api.zilliqa.com');
+    const zilliqa = new Zilliqa(api);
     zilliqa.wallet.addByPrivateKey(privateKey);
     const myGasPrice = units.toQa('2000', units.Units.Li);
 

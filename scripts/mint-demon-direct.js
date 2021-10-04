@@ -9,22 +9,29 @@ const { Zilliqa } = require('@zilliqa-js/zilliqa');
 async function main() {
     const myArgs = process.argv.slice(2);
 
-    if (myArgs.length < 4) {
+    if (myArgs.length < 5) {
         console.error("Wrong arguments\n");
-        console.log("node mint-demon-direct.js [private_key] [0x_demon_addr] [0x_recipient_addr] [imageURI]");
+        console.log("node mint-demon-direct.js [private_key] [0x_demon_addr] [0x_recipient_addr] [imageURI] [testnet / mainnet]");
         return;
     }
 
+    let api = 'https://dev-api.zilliqa.com';
     const privateKey = myArgs[0];
     const demon = myArgs[1]         //0xbase16
     const recipient = myArgs[2];    // 0xbase16
     const imageURI = myArgs[3];     // demon image url from pinata
+    const network = myArgs[4];
+
+    if (network === 'mainnet') {
+        api = 'https://api.zilliqa.com';
+    }
     
     console.log("demon: ", demon);
     console.log("recipient: ", recipient);
     console.log("demon image: ", imageURI);
+    console.log("network: ", api);
 
-    const zilliqa = new Zilliqa('https://dev-api.zilliqa.com');
+    const zilliqa = new Zilliqa(api);
     zilliqa.wallet.addByPrivateKey(privateKey);
     const myGasPrice = units.toQa('2000', units.Units.Li);
 
