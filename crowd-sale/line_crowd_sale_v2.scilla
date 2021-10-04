@@ -415,7 +415,7 @@ transition MintCallBack(recipient: ByStr20, token_id: Uint256, token_uri: String
   new_count = builtin add current_count one256;
   total := new_count;
 
-  e = {_eventname : "MintDemonSuccess"; recipient: recipient; token_id: token_id; token_uri: token_uri};
+  e = {_eventname : "MintDemonSuccess"; minted: total};
   event e
 end
 
