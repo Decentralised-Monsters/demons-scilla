@@ -9,22 +9,29 @@ const fs = require('fs');
 async function main() {
     const myArgs = process.argv.slice(2);
     
-    if (myArgs.length < 4) {
+    if (myArgs.length < 5) {
         console.error("Wrong arguments");
-        console.log("node deploy-distributor.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr]");
+        console.log("node deploy-distributor.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [testnet / mainnet]");
         return;
     }
 
+    let api = 'https://dev-api.zilliqa.com';
     const privateKey = myArgs[0];
     const commWallet = myArgs[1];
     const dmz = myArgs[2];
     const demon = myArgs[3];
+    const network = myArgs[4];
+
+    if (network === 'mainnet') {
+        api = 'https://api.zilliqa.com';
+    }
 
     console.log("commWallet: ", commWallet);
     console.log("dmz: ", dmz);
     console.log("demon: ", demon);
+    console.log("network: ", api);
 
-    const zilliqa = new Zilliqa('https://dev-api.zilliqa.com');
+    const zilliqa = new Zilliqa(api);
     zilliqa.wallet.addByPrivateKey(privateKey);
     const address = getAddressFromPrivateKey(privateKey);
     const myGasPrice = units.toQa('2000', units.Units.Li);

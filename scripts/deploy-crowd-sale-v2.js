@@ -8,21 +8,27 @@ const fs = require('fs');
 
 async function main() {
     const myArgs = process.argv.slice(2);
-
-    if (myArgs.length < 2) {
-        console.error("Wrong arguments\n");
-        console.log("node deploy-dummy-mp.js [private_key] [testnet / mainnet]");
+    
+    if (myArgs.length < 5) {
+        console.error("Wrong arguments");
+        console.log("node deploy-crowd-sale.js [private_key] [0x_wallet_addr] [0x_dmz] [0x_demon_addr] [testnet / mainnet]");
         return;
     }
 
     let api = 'https://dev-api.zilliqa.com';
     const privateKey = myArgs[0];
-    const network = myArgs[1];
+    const commWallet = myArgs[1];
+    const dmz = myArgs[2];
+    const demon = myArgs[3];
+    const network = myArgs[4];
 
     if (network === 'mainnet') {
         api = 'https://api.zilliqa.com';
     }
 
+    console.log("commWallet: ", commWallet);
+    console.log("dmz: ", dmz);
+    console.log("demon: ", demon);
     console.log("network: ", api);
 
     const zilliqa = new Zilliqa(api);
@@ -37,12 +43,32 @@ async function main() {
         const VERSION = bytes.pack(parseInt(networkId.result), 1);
 
         // deploy impl
-        const implCode = fs.readFileSync(__dirname + '/../market-place/dummy_marketplace.scilla', 'utf-8');
+        const implCode = fs.readFileSync(__dirname + '/../crowd-sale/line_crowd_sale_v2.scilla', 'utf-8');
         const init = [
             {
                 vname: '_scilla_version',
                 type: 'Uint32',
                 value: '0',
+            },
+            {
+                vname: 'contract_owner',
+                type: 'ByStr20',
+                value: `${address}`,
+            },
+            {
+                vname: 'init_wallet',
+                type: 'ByStr20',
+                value: `${commWallet}`,
+            },
+            {
+                vname: 'init_dmz',
+                type: 'ByStr20',
+                value: `${dmz}`,
+            },
+            {
+                vname: 'main',
+                type: 'ByStr20',
+                value: `${demon}`,
             },
         ];
         const implContract = zilliqa.contracts.new(implCode, init);

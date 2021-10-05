@@ -1,0 +1,436 @@
+scilla_version 0
+
+(***************************************************)
+(*               Associated library                *)
+(***************************************************)
+import BoolUtils IntUtils
+
+library LineCurvedDistributor
+
+(* Error events *)
+type Error =
+  | CodeNotMain
+  | CodeInsufficientFunds
+  | CodeNotContractOwner
+  | CodeNotFound
+  | CodePauseNotPause
+  | CodeInvalidPaymentMode
+
+let not_pause = Uint32 0
+let on_pause = Uint32 1
+let zero256 = Uint256 0
+let zero128 = Uint128 0
+let one256 = Uint256 1
+let one128 = Uint128 1
+
+let payment_mode_zil = Uint32 1
+let payment_mode_dmz = Uint32 2
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+  Cons {Message} msg nil_msg
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeNotMain             => Int32 -1
+      | CodeInsufficientFunds   => Int32 -2
+      | CodeNotContractOwner    => Int32 -3
+      | CodeNotFound            => Int32 -4
+      | CodePauseNotPause       => Int32 -5
+      | CodeInvalidPaymentMode  => Int32 -6
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_uint128 = @option_value Uint128
+
+(* ((total_supply / decimal) + 1) * starting_price *)
+(* ts: total_supply *)
+(* b: decimal value *)
+(* price: starting price *)
+let get_price =
+  fun (ts: Uint256) =>
+  fun (b: Uint256) =>
+  fun (price: Uint256) =>
+    let ts_dec = builtin div ts b in
+    let ts_dec = builtin add ts_dec one256 in
+    let p = builtin mul ts_dec price in
+    let some_amount = builtin to_uint128 p in
+      option_uint128 zero128 some_amount
+
+let get_count =
+  fun (a: Uint128) =>
+  fun (p: Uint128) =>
+    builtin div a p
+
+let change_of_coins =
+  fun (count: Uint128) =>
+  fun (price: Uint128) =>
+  fun (amount: Uint128) =>
+    let is_one = builtin eq count one128 in
+      match is_one with
+      | True => zero128
+      | False =>
+        builtin sub amount price
+      end
+
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+
+contract LineCurvedDistributor
+(
+  contract_owner: ByStr20,
+  init_wallet: ByStr20,
+  init_dmz: ByStr20,
+  main: ByStr20 with contract
+    field token_id_count: Uint256
+  end
+)
+
+(* Mutable fields *)
+field owner: ByStr20 = contract_owner
+field pending_owner: Option ByStr20 = None {ByStr20}
+field dmz: ByStr20 = init_dmz
+field wallet: ByStr20 = init_wallet
+field pause: Uint32 = on_pause
+field payment_mode: Uint32 = payment_mode_zil
+
+(* Total token count *)
+field reserve: Uint256 = zero256
+field total: Uint256 = zero256
+
+field tokens_reserve: Map Uint256 String = Emp Uint256 String
+field decimal: Uint256 = Uint256 25
+field price: Uint256 = Uint256 3000000000000000
+field buy_incentive: Uint128 = Uint128 200000000000000000000
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsContractOwner()
+  current_owner <- owner;
+  is_contract_owner = builtin eq current_owner _sender;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotContractOwner;
+    ThrowError err
+  end
+end
+
+procedure IsMain()
+  is_main_contract = builtin eq main _sender;
+
+  match is_main_contract with
+  | True =>
+  | False =>
+    err = CodeNotMain;
+    ThrowError err
+  end
+end
+
+procedure AddFunds(recipient: ByStr20, amount: Uint128)
+  is_zero = builtin eq amount zero128;
+
+  match is_zero with
+  | False =>
+    msg = {
+      _tag: "AddFunds";
+      _recipient: recipient;
+      _amount: amount
+    };
+    msgs = one_msg msg;
+    send msgs
+  | True =>
+  end
+end
+
+procedure CheckPause(expected: Uint32)
+  curent_pause <- pause;
+  is_eq = builtin eq expected curent_pause;
+  match is_eq with
+  | True =>
+  | False =>
+    err = CodePauseNotPause;
+    ThrowError err
+  end
+end
+
+procedure CheckPaymentMode(expected: Uint32)
+  current_payment_mode <- payment_mode;
+  is_eq = builtin eq expected current_payment_mode;
+  match is_eq with
+  | True =>
+  | False =>
+    err = CodeInvalidPaymentMode;
+    ThrowError err
+  end
+end
+
+
+procedure Minting(to: ByStr20)
+  total_reserve <- reserve;
+  some_uri <- tokens_reserve[total_reserve];
+
+  match some_uri with
+  | Some uri =>
+    msg_to_demons = {
+      _tag: "Mint";
+      _recipient: main;
+      _amount: Uint128 0;
+      to: to;
+      token_uri: uri
+    };
+    msgs = one_msg msg_to_demons;
+    send msgs;
+    new_total_reserve = builtin sub total_reserve one256;
+
+    reserve := new_total_reserve;
+    delete tokens_reserve[total_reserve]
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
+
+procedure AddReserve(uri: String)
+  count_reserve <- reserve;
+
+  new_count_reserve = builtin add count_reserve one256;
+
+  tokens_reserve[new_count_reserve] := uri;
+  reserve := new_count_reserve
+end
+
+procedure CallTransferFrom(amount: Uint128, from: ByStr20, to: ByStr20)
+  dmz_o <- dmz;
+  call_transfer_from = {
+    _tag: "TransferFrom";
+    _recipient: dmz_o;
+    _amount: Uint128 0;
+    from: from;
+    to: to;
+    amount: amount
+  };
+  msgs = one_msg call_transfer_from;
+  send msgs
+end
+
+(* @dev Updates the token image uri list; used by contract owner. *)
+(* @param token_uris_list: image URI list in REVERSE order, 20.jpg, 19.jpg...01.jpg *)
+transition AddReserveList(token_uris_list: List String)
+  IsContractOwner;
+  forall token_uris_list AddReserve
+end
+
+(* @dev Updates the starting price; used by contract owner. *)
+(* @param value: new starting price in Qa *)
+transition ChangePrice(value: Uint256)
+  IsContractOwner;
+  price := value;
+  e = {_eventname: "ChangePrice"; new_price: value};
+  event e
+end
+
+(* @dev Updates the constant factor; used by contract owner. *)
+(* @param value: new decimal value *)
+transition ChangeDecimal(value: Uint256)
+  IsContractOwner;
+  decimal := value;
+  e = {_eventname: "ChangeDecimal"; new_decimal: value};
+  event e
+end
+
+(* @dev Updates the incentive received when buying demon; used by contract owner. *)
+(* @param value: new buy incentive value in DMZ decimal places *)
+transition ChangeIncentive(value: Uint128)
+  IsContractOwner;
+  buy_incentive := value;
+  e = {_eventname: "ChangeIncentive"; new_buy_incentive: value};
+  event e
+end
+
+(* @dev Buy a demon with ZILs. *)
+(* contract must be unpaused first *)
+(* Price of demon is set by math model. Users will get refund if they pay more than necessary. *)
+transition Buy()
+  CheckPause not_pause;
+  CheckPaymentMode payment_mode_zil;
+
+  total_supply <- total;
+  decimal_value <- decimal;
+  price_value <- price;
+
+  price_amount = get_price total_supply decimal_value price_value;
+  count = get_count _amount price_amount;
+  is_zero = builtin eq count zero128;
+
+  match is_zero with
+  | True =>
+    err = CodeInsufficientFunds;
+    ThrowError err
+  | False =>
+    accept;
+
+    comm_wallet <- wallet;
+    incentive <- buy_incentive;
+
+    change = change_of_coins count price_amount _amount;
+    AddFunds _sender change;
+    Minting _sender;
+    CallTransferFrom incentive comm_wallet _sender
+  end
+end
+
+(* @dev Buy a demon with DMZ. *)
+(* contract must be unpaused first. payment mode must change to DMZ *)
+(* Price of demon is set by math model. *)
+transition BuyDemonWithDMZ()
+  CheckPause not_pause;
+  CheckPaymentMode payment_mode_dmz;
+
+  total_supply <- total;
+  decimal_value <- decimal;
+  price_value <- price;
+
+  price_amount = get_price total_supply decimal_value price_value;
+
+  comm_wallet <- wallet;
+  incentive <- buy_incentive;
+
+  (* transfer dmz to comm wallet *)
+  CallTransferFrom price_amount _sender comm_wallet;
+  Minting _sender;
+  CallTransferFrom incentive comm_wallet _sender
+end
+
+(* @dev Drain contract balance to comm wallet; used only by contract owner *)
+transition DrainContractBalance()
+  IsContractOwner;
+  bal <- _balance;
+  wallet_o <- wallet;
+  AddFunds wallet_o bal
+end
+
+(* @dev Pause or unpause the contract; used only by contract owner *)
+transition UpdatePause()
+  IsContractOwner;
+  status <- pause;
+  is_pause = builtin eq status on_pause;
+  match is_pause with
+  | True =>
+    pause := not_pause
+  | False =>
+    pause := on_pause
+  end;
+  updated_pause <- pause;
+  e = {_eventname : "UpdatePause"; pause: updated_pause};
+  event e
+end
+
+(* @dev Updates the payment mode when buying demons; zil or dmz; used only by contract owner *)
+transition UpdatePaymentMode(new_payment_mode: Uint32)
+  IsContractOwner;
+  is_gte_first = uint32_ge new_payment_mode payment_mode_zil;
+  is_lte_last = uint32_le new_payment_mode payment_mode_dmz;
+  is_within_range = andb is_gte_first is_lte_last;
+
+  match is_within_range with
+  | True =>
+    payment_mode := new_payment_mode
+  | False =>
+    err = CodeInvalidPaymentMode;
+    ThrowError err
+  end;
+
+  updated_payment_mode <- payment_mode;
+  e = {_eventname : "UpdatePaymentMode"; payment_mode: updated_payment_mode};
+  event e
+end
+
+(* @dev Updates the dmz contract address; used only by contract owner *)
+transition UpdateDMZ(new_dmz: ByStr20)
+  IsContractOwner;
+  dmz := new_dmz;
+  e = {_eventname: "UpdateDMZ"; new_dmz: new_dmz};
+  event e
+end
+
+(* @dev Updates the wallet contract address; used only by contract owner *)
+transition UpdateWallet(new_wallet: ByStr20)
+  IsContractOwner;
+  wallet := new_wallet;
+  e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
+  event e
+end
+
+
+(* @dev: Sets a new contract owner; used by contract owner only. *)
+(* Current owner can abort the process by calling this transition with their own address *)
+(* @param: new_owner New owner address *)
+transition RequestOwnershipTransfer(new_owner: ByStr20)
+  IsContractOwner;
+  po = Some {ByStr20} new_owner;
+  pending_owner := po;
+  e = {_eventname: "RequestOwnershipTransfer"; new_owner: new_owner};
+  event e
+end
+
+(* @dev: New owner accepts the ownership transfer request; used by the new owner only. *)
+transition ConfirmOwnershipTransfer()
+  optional_po <- pending_owner;
+  match optional_po with
+  | Some pend_owner =>
+    caller_is_new_owner = builtin eq _sender pend_owner;
+    match caller_is_new_owner with
+    | True =>
+      (* transfer ownership *)
+      owner := pend_owner;
+      none = None {ByStr20};
+      pending_owner := none;
+      e = {_eventname: "ConfirmOwnershipTransfer"; new_owner: pend_owner};
+      event e
+    | False =>
+      (* caller is not the new owner, do nothing *)
+      err = CodeNotContractOwner;
+      ThrowError err
+    end
+  | None =>
+    (* ownership transfer is not in-progress, do nothing *)
+  end
+end
+
+(* callbacks *)
+(* Buy -> Minting -> Mint (demon_contract) -> MintCallBack *)
+transition MintCallBack(recipient: ByStr20, token_id: Uint256, token_uri: String)
+  IsMain;  
+
+  current_count <- total;
+  new_count = builtin add current_count one256;
+  total := new_count;
+
+  e = {_eventname : "MintDemonSuccess"; minted: new_count};
+  event e
+end
+
+(* Buy -> Minting -> CallTransferFrom *)
+transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+(* callbacks *)

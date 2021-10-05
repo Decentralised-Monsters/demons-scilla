@@ -9,22 +9,29 @@ const { Zilliqa } = require('@zilliqa-js/zilliqa');
 async function main() {
     const myArgs = process.argv.slice(2);
 
-    if (myArgs.length < 4) {
+    if (myArgs.length < 5) {
         console.error("Wrong arguments\n");
-        console.log("node transfer-dmz.js [private_key] [0x_dmz_contract_addr] [0x_recipient_addr] [dmz_amt_to_xfer]");
+        console.log("node transfer-dmz.js [private_key] [0x_dmz_contract_addr] [0x_recipient_addr] [dmz_amt_to_xfer] [testnet / mainnet]");
         return;
     }
 
+    let api = 'https://dev-api.zilliqa.com';
     const privateKey = myArgs[0];
     const dmz = myArgs[1]           //0xbase16
     const recipient = myArgs[2];    // 0xbase16
     const dmzAmt = myArgs[3];       // in dmz places
+    const network = myArgs[4];
+
+    if (network === 'mainnet') {
+        api = 'https://api.zilliqa.com';
+    }
 
     console.log("dmz: ", dmz);
     console.log("recipient: ", recipient);
     console.log("amount (dmz): ", dmzAmt);
+    console.log("network: ", api);
 
-    const zilliqa = new Zilliqa('https://dev-api.zilliqa.com');
+    const zilliqa = new Zilliqa(api);
     zilliqa.wallet.addByPrivateKey(privateKey);
     const myGasPrice = units.toQa('2000', units.Units.Li);
 
