@@ -258,6 +258,15 @@ transition ChangeDecimal(value: Uint256)
   event e
 end
 
+(* @dev Updates the incentive received when buying demon; used by contract owner. *)
+(* @param value: new buy incentive value in DMZ decimal places *)
+transition ChangeIncentive(value: Uint128)
+  IsContractOwner;
+  buy_incentive := value;
+  e = {_eventname: "ChangeIncentive"; new_buy_incentive: value};
+  event e
+end
+
 (* @dev Buy a demon with ZILs. *)
 (* contract must be unpaused first *)
 (* Price of demon is set by math model. Users will get refund if they pay more than necessary. *)
@@ -338,6 +347,7 @@ end
 
 (* @dev Updates the payment mode when buying demons; zil or dmz; used only by contract owner *)
 transition UpdatePaymentMode(new_payment_mode: Uint32)
+  IsContractOwner;
   is_gte_first = uint32_ge new_payment_mode payment_mode_zil;
   is_lte_last = uint32_le new_payment_mode payment_mode_dmz;
   is_within_range = andb is_gte_first is_lte_last;
@@ -370,6 +380,7 @@ transition UpdateWallet(new_wallet: ByStr20)
   e = {_eventname: "UpdateWallet"; new_wallet: new_wallet};
   event e
 end
+
 
 (* @dev: Sets a new contract owner; used by contract owner only. *)
 (* Current owner can abort the process by calling this transition with their own address *)
@@ -415,7 +426,7 @@ transition MintCallBack(recipient: ByStr20, token_id: Uint256, token_uri: String
   new_count = builtin add current_count one256;
   total := new_count;
 
-  e = {_eventname : "MintDemonSuccess"; minted: total};
+  e = {_eventname : "MintDemonSuccess"; minted: new_count};
   event e
 end
 
