@@ -25,6 +25,7 @@ yarn-error.log*
 .env.production.local
 
 #irrelevant pages
+/scripts/token_reserve.json
 /yarn.lock
 
 .env
