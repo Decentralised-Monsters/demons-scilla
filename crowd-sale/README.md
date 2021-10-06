@@ -2,6 +2,8 @@
 
 The crowd sale contract contains the buy mechanism that will mint the demon. It uses a line-step curve formula to compute the price of each demon.
 
+**Note**: A new crowd sale contract should be deployed for each new series release as we need to reset the `total` for computing the demon price.
+
  * **Buy** - Buy a demon. The demon will be minted by demon contract.
  * **AddReserveList** - An owner transition to update the list of token image uri. Image URI must be uploaded in reverse. E.g. start from 10.jpg, 09.jpg ... 01.jpg.
  * - token_uris_list (List String) - The list of demon image URIs, separated by commas in square brakcets, e.g. ["http://cloud/image/20.jpg", "http://cloud/image/19.jpg"...]
