@@ -89,7 +89,9 @@ contract LineCurvedDistributor
 (
   contract_owner: ByStr20,
   init_wallet: ByStr20,
-  init_dmz: ByStr20,
+  init_dmz: ByStr20 with contract
+    field balances: Map ByStr20 Uint128
+  end,
   main: ByStr20 with contract
     field token_id_count: Uint256
   end
@@ -153,6 +155,20 @@ procedure AddFunds(recipient: ByStr20, amount: Uint128)
     send msgs
   | True =>
   end
+end
+
+procedure CallTransfer(to: ByStr20, amount: Uint128)
+  addr_dmz <- dmz;
+
+  msg_transfer = {
+    _tag: "Transfer";
+    _recipient: addr_dmz;
+    _amount: zero128;
+    to: to;
+    amount: amount
+  };
+  msgs = one_msg msg_transfer;
+  send msgs
 end
 
 procedure CheckPause(expected: Uint32)
@@ -227,8 +243,6 @@ procedure BuyForDMZ(amount: Uint128, sender: ByStr20)
     err = CodeInsufficientFunds;
     ThrowError err
   | False =>
-    accept;
-
     comm_wallet <- wallet;
     incentive <- buy_incentive;
 
@@ -364,6 +378,17 @@ transition ConfirmOwnershipTransfer()
     end
   | None =>
     (* ownership transfer is not in-progress, do nothing *)
+  end
+end
+
+transition ReturnFunds()
+  owner_wallet <- wallet;
+  some_bal <-& init_dmz.balances[_this_address];
+
+  match some_bal with
+  | None =>
+  | Some bal =>
+    CallTransfer owner_wallet bal
   end
 end
 
