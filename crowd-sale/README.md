@@ -1,12 +1,20 @@
 # Line Crowd Sale
 
-## Line Crowd Sale With DMZ / ZIL Payment
-* [Line Crowd Sale v2](./line_crowd_sale_v2.scilla)
-* [Line Crowd Sale v2 Readme](./line_crowd_sale_v2.md)
-
 The crowd sale contract contains the buy mechanism that will mint the demon. It uses a line-step curve formula to compute the price of each demon.
 
 **Note**: A new crowd sale contract should be deployed for each new series release as we need to reset the `total` for computing the demon price.
+
+
+## Line Crowd Sale (Support DMZ / ZIL Payment) (Latest - October 2021)
+This is version 2 contract that supports DMZ / ZIL payment. This should be the default line crowd sale to deployed for future releases.
+
+* [Line Crowd Sale v2](./line_crowd_sale_v2.scilla)
+* [Line Crowd Sale v2 Readme](./line_crowd_sale_v2.md)
+
+
+## Line Crowd Sale (Support ZIL Payment Only)
+
+This is version 1 of the original line crowd sale contract that only supports ZIL payment. Please use the version 2 variant if you need to support DMZ payment.
 
  * **Buy** - Buy a demon. The demon will be minted by demon contract.
  * **AddReserveList** - An owner transition to update the list of token image uri. Image URI must be uploaded in reverse. E.g. start from 10.jpg, 09.jpg ... 01.jpg.
