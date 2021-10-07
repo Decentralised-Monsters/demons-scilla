@@ -111,6 +111,7 @@ field total: Uint256 = zero256
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
 field decimal: Uint256 = Uint256 25
 field price: Uint256 = Uint256 3000000000000000
+field dmz_price: Uint256 = Uint256 3000000000000000
 field buy_incentive: Uint128 = Uint128 200000000000000000000
 
 (* Emit Errors *)
@@ -232,7 +233,7 @@ end
 procedure BuyForDMZ(amount: Uint128, sender: ByStr20)
   total_supply <- total;
   decimal_value <- decimal;
-  price_value <- price;
+  price_value <- dmz_price;
 
   price_amount = get_price total_supply decimal_value price_value;
   count = get_count amount price_amount;
@@ -243,9 +244,6 @@ procedure BuyForDMZ(amount: Uint128, sender: ByStr20)
     err = CodeInsufficientFunds;
     ThrowError err
   | False =>
-    comm_wallet <- wallet;
-    incentive <- buy_incentive;
-
     change = change_of_coins count price_amount amount;
     AddFunds _sender change;
     Minting _sender
