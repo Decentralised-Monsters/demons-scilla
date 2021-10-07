@@ -4,11 +4,16 @@ import IntUtils
 
 library VoteManager
 
+(* User-defined ADTs *)
+type Dummy =
+| Dummy
+
 (* Error exceptions *)
 type Error =
   | CodeNotAuthorized
   | CodeContractAlreadyExists
   | CodeInvalidVoteID
+  | CodeIsNotManager
 
 let make_error =
   fun (result : Error) =>
@@ -17,11 +22,13 @@ let make_error =
       | CodeNotAuthorized            => Int32 -1
       | CodeContractAlreadyExists    => Int32 -2
       | CodeInvalidVoteID            => Int32 -3
+      | CodeIsNotManager             => Int32 -4
       end
     in
     { _exception : "Error"; code : result_code }
 
 let one256 = Uint256 1
+let verdad = Dummy
 
 (***************************************************)
 (*             The contract definition             *)
@@ -34,6 +41,11 @@ contract VoteManager
 
 field owner: ByStr20 = contract_owner
 field pending_owner: Option ByStr20 = None {ByStr20}
+
+(* mapping of managers available *)
+field managers: Map ByStr20 Dummy =
+    let emp_map = Emp ByStr20 Dummy in
+    builtin put emp_map contract_owner verdad
 
 (* vote_id => contract address *)
 field vote_contracts : Map Uint256 ByStr20 = Emp Uint256 ByStr20
@@ -59,10 +71,21 @@ procedure IsContractOwner()
   end
 end
 
-(* @dev: Adds a new voting contract address; used by contract owner only *)
+procedure IsManager(address: ByStr20)
+  is_manager <- exists managers[address];
+  match is_manager with
+  | True =>
+  | False =>
+    err = CodeIsNotManager;
+    ThrowError err
+  end
+end
+
+
+(* @dev: Adds a new voting contract address; used by managers only *)
 (* @param: new_contract New voting contract address that is deployed *)
 transition AddVoteContract(new_contract: ByStr20)
-  IsContractOwner;
+  IsManager _sender;
 
   some_vote_id <- reverse_vote_contracts[new_contract];
 
@@ -82,10 +105,10 @@ transition AddVoteContract(new_contract: ByStr20)
   end
 end
 
-(* @dev: Deletes an existing voting contract address; used by contract owner only *)
+(* @dev: Deletes an existing voting contract address; used by managers only *)
 (* @param: id Vote id to be deleted *)
 transition DeleteVoteContract(id: Uint256)
-  IsContractOwner;
+  IsManager _sender;
 
   some_vote_contract <- vote_contracts[id];
 
@@ -99,6 +122,27 @@ transition DeleteVoteContract(id: Uint256)
     (* do nothing; does not exists *)
     err = CodeInvalidVoteID;
     ThrowError err
+  end
+end
+
+(* @dev: Add or remove a manager; used by contract owner only *)
+(* managers have the rights to add or remove vote contracts *)
+(* @param manager: Address of the manager to add or remove *)
+transition ConfigureManager(manager: ByStr20)
+  IsContractOwner;
+  some_manager <- managers[manager];
+  
+  match some_manager with
+  | Some Dummy =>
+    (* remove manager *)
+    delete managers[manager];
+    e = { _eventname: "RemoveManagerSuccess"; manager: manager };
+    event e
+  | None =>
+    (* add manager *)
+    managers[manager] := verdad;
+    e = { _eventname: "AddManagerSuccess"; manager: manager };
+    event e
   end
 end
 
