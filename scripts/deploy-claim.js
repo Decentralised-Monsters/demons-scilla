@@ -11,7 +11,7 @@ async function main() {
     
     if (myArgs.length < 5) {
         console.error("Wrong arguments");
-        console.log("node deploy-distributor.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [testnet / mainnet]");
+        console.log("node deploy-claim.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [testnet / mainnet]");
         return;
     }
 

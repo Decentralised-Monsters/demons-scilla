@@ -11,7 +11,7 @@ async function main() {
 
     if (myArgs.length < 6) {
         console.error("Wrong arguments");
-        console.log("node deploy-levelup.js [private_key] [0x_wallet] [0x_dmz_addr] [0x_distributor_addr] [0x_demon_addr] [testnet / mainnet]");
+        console.log("node deploy-levelup.js [private_key] [0x_wallet] [0x_dmz_addr] [0x_claim_distributor_addr] [0x_demon_addr] [testnet / mainnet]");
         return;
     }
 
@@ -29,7 +29,7 @@ async function main() {
 
     console.log("commWallet: ", commWallet);
     console.log("dmz: ", dmz);
-    console.log("distributor: ", distributor);
+    console.log("claim distributor: ", distributor);
     console.log("demon: ", demon);
     console.log("network: ", api);
 
