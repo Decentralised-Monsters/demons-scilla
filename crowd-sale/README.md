@@ -1,5 +1,9 @@
 # Line Crowd Sale
 
+## Line Crowd Sale With DMZ / ZIL Payment
+* [Line Crowd Sale v2](./line_crowd_sale_v2.scilla)
+* [Line Crowd Sale v2 Readme](./line_crowd_sale_v2.md)
+
 The crowd sale contract contains the buy mechanism that will mint the demon. It uses a line-step curve formula to compute the price of each demon.
 
 **Note**: A new crowd sale contract should be deployed for each new series release as we need to reset the `total` for computing the demon price.
