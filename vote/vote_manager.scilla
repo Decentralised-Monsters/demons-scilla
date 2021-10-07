@@ -1,0 +1,138 @@
+scilla_version 0
+
+import IntUtils
+
+library VoteManager
+
+(* Error exceptions *)
+type Error =
+  | CodeNotAuthorized
+  | CodeContractAlreadyExists
+  | CodeInvalidVoteID
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeNotAuthorized            => Int32 -1
+      | CodeContractAlreadyExists    => Int32 -2
+      | CodeInvalidVoteID            => Int32 -3
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+let one256 = Uint256 1
+
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+
+contract VoteManager
+(
+    contract_owner: ByStr20
+)
+
+field owner: ByStr20 = contract_owner
+field pending_owner: Option ByStr20 = None {ByStr20}
+
+(* vote_id => contract address *)
+field vote_contracts : Map Uint256 ByStr20 = Emp Uint256 ByStr20
+
+(* contract address => vote_id - reverse lookup to quickly check if address exists *)
+field reverse_vote_contracts : Map ByStr20 Uint256 = Emp ByStr20 Uint256
+field vote_id : Uint256 = Uint256 0
+
+(* Procedures *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsContractOwner()
+  current_owner <- owner;
+  is_contract_owner = builtin eq _sender current_owner;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotAuthorized;
+    ThrowError err 
+  end
+end
+
+(* @dev: Adds a new voting contract address; used by contract owner only *)
+(* @param: new_contract New voting contract address that is deployed *)
+transition AddVoteContract(new_contract: ByStr20)
+  IsContractOwner;
+
+  some_vote_id <- reverse_vote_contracts[new_contract];
+
+  match some_vote_id with
+  | Some existing_vote_contract =>
+    (* contract already in manager *)
+    err = CodeContractAlreadyExists;
+    ThrowError err
+  | None =>
+    current_vote_id <- vote_id;
+    vote_contracts[current_vote_id] := new_contract;
+    new_vote_id = builtin add current_vote_id one256;
+    vote_id := new_vote_id;
+
+    e = { _eventname: "AddVoteContract"; vote_id: current_vote_id; vote_contract: new_contract };
+    event e
+  end
+end
+
+(* @dev: Deletes an existing voting contract address; used by contract owner only *)
+(* @param: id Vote id to be deleted *)
+transition DeleteVoteContract(id: Uint256)
+  IsContractOwner;
+
+  some_vote_contract <- vote_contracts[id];
+
+  match some_vote_contract with
+  | Some existing_vote_contract =>
+    delete vote_contracts[id];
+    delete reverse_vote_contracts[existing_vote_contract];
+    e = { _eventname: "DeleteVoteContract"; vote_id: id; vote_contract: existing_vote_contract };
+    event e
+  | None =>
+    (* do nothing; does not exists *)
+    err = CodeInvalidVoteID;
+    ThrowError err
+  end
+end
+
+(* @dev: Sets a new contract owner; used by contract owner only. *)
+(* Current owner can abort the process by calling this transition with their own address *)
+(* @param: new_owner New owner address *)
+transition RequestOwnershipTransfer(new_owner: ByStr20)
+  IsContractOwner;
+  po = Some {ByStr20} new_owner;
+  pending_owner := po;
+  e = {_eventname: "RequestOwnershipTransfer"; new_owner: new_owner};
+  event e
+end
+
+(* @dev: New owner accepts the ownership transfer request; used by the new owner only. *)
+transition ConfirmOwnershipTransfer()
+  optional_po <- pending_owner;
+  match optional_po with
+  | Some pend_owner =>
+    caller_is_new_owner = builtin eq _sender pend_owner;
+    match caller_is_new_owner with
+    | True =>
+      (* transfer ownership *)
+      owner := pend_owner;
+      none = None {ByStr20};
+      pending_owner := none;
+      e = {_eventname: "ConfirmOwnershipTransfer"; new_owner: pend_owner};
+      event e
+    | False =>
+      (* caller is not the new owner, do nothing *)
+      err = CodeNotAuthorized;
+      ThrowError err
+    end
+  | None =>
+    (* ownership transfer is not in-progress, do nothing *)
+  end
+end
