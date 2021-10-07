@@ -8,6 +8,14 @@ library VoteManager
 type Dummy =
 | Dummy
 
+
+(* ByStr20 - vote_address *)
+(* String - name *)
+(* BNum - expiration_block *)
+(* BNum - registration_end_block *)
+type VoteDetails =
+  | VoteDetails of ByStr20 String BNum BNum
+
 (* Error exceptions *)
 type Error =
   | CodeNotAuthorized
@@ -29,6 +37,7 @@ let make_error =
 
 let one256 = Uint256 1
 let verdad = Dummy
+    
 
 (***************************************************)
 (*             The contract definition             *)
@@ -48,7 +57,7 @@ field managers: Map ByStr20 Dummy =
     builtin put emp_map contract_owner verdad
 
 (* vote_id => contract address *)
-field vote_contracts : Map Uint256 ByStr20 = Emp Uint256 ByStr20
+field vote_contracts : Map Uint256 VoteDetails = Emp Uint256 VoteDetails
 
 (* contract address => vote_id - reverse lookup to quickly check if address exists *)
 field reverse_vote_contracts : Map ByStr20 Uint256 = Emp ByStr20 Uint256
@@ -83,11 +92,14 @@ end
 
 
 (* @dev: Adds a new voting contract address; used by managers only *)
-(* @param: new_contract New voting contract address that is deployed *)
-transition AddVoteContract(new_contract: ByStr20)
+(* @param vote_address: New voting contract address that is deployed *)
+(* @param name: name of the vote  *)
+(* @param expiration_block: block number that the vote will end *)
+(* @param reg_end_block: block number that registration will end. After registration ends, users can start to vote *)
+transition AddVoteContract(vote_address: ByStr20, name: String, expiration_block: BNum, reg_end_block: BNum)
   IsManager _sender;
 
-  some_vote_id <- reverse_vote_contracts[new_contract];
+  some_vote_id <- reverse_vote_contracts[vote_address];
 
   match some_vote_id with
   | Some existing_vote_contract =>
@@ -96,11 +108,14 @@ transition AddVoteContract(new_contract: ByStr20)
     ThrowError err
   | None =>
     current_vote_id <- vote_id;
-    vote_contracts[current_vote_id] := new_contract;
+    new_vote_details = VoteDetails vote_address name expiration_block reg_end_block;
+    vote_contracts[current_vote_id] := new_vote_details;
+    reverse_vote_contracts[vote_address] := current_vote_id;
+
     new_vote_id = builtin add current_vote_id one256;
     vote_id := new_vote_id;
 
-    e = { _eventname: "AddVoteContract"; vote_id: current_vote_id; vote_contract: new_contract };
+    e = { _eventname: "AddVoteContract"; vote_id: current_vote_id; vote_address: vote_address };
     event e
   end
 end
@@ -110,13 +125,13 @@ end
 transition DeleteVoteContract(id: Uint256)
   IsManager _sender;
 
-  some_vote_contract <- vote_contracts[id];
+  some_vote_details <- vote_contracts[id];
 
-  match some_vote_contract with
-  | Some existing_vote_contract =>
+  match some_vote_details with
+  | Some (VoteDetails vote_address name expiration_block reg_end_block) =>
     delete vote_contracts[id];
-    delete reverse_vote_contracts[existing_vote_contract];
-    e = { _eventname: "DeleteVoteContract"; vote_id: id; vote_contract: existing_vote_contract };
+    delete reverse_vote_contracts[vote_address];
+    e = { _eventname: "DeleteVoteContract"; vote_id: id; vote_address: vote_address };
     event e
   | None =>
     (* do nothing; does not exists *)
