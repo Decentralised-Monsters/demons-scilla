@@ -13,8 +13,8 @@ type Dummy =
 (* String - name *)
 (* BNum - expiration_block *)
 (* BNum - registration_end_block *)
-type VoteDetails =
-  | VoteDetails of ByStr20 String BNum BNum
+type DemonVote =
+  | DemonVote of ByStr20 String BNum BNum
 
 (* Error exceptions *)
 type Error =
@@ -22,15 +22,17 @@ type Error =
   | CodeContractAlreadyExists
   | CodeInvalidVoteID
   | CodeIsNotManager
+  | CodeInvalidRegistrationBlock
 
 let make_error =
   fun (result : Error) =>
     let result_code = 
       match result with
-      | CodeNotAuthorized            => Int32 -1
-      | CodeContractAlreadyExists    => Int32 -2
-      | CodeInvalidVoteID            => Int32 -3
-      | CodeIsNotManager             => Int32 -4
+      | CodeNotAuthorized             => Int32 -1
+      | CodeContractAlreadyExists     => Int32 -2
+      | CodeInvalidVoteID             => Int32 -3
+      | CodeIsNotManager              => Int32 -4
+      | CodeInvalidRegistrationBlock  => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
@@ -57,7 +59,7 @@ field managers: Map ByStr20 Dummy =
     builtin put emp_map contract_owner verdad
 
 (* vote_id => contract address *)
-field vote_contracts : Map Uint256 VoteDetails = Emp Uint256 VoteDetails
+field vote_contracts : Map Uint256 DemonVote = Emp Uint256 DemonVote
 
 (* contract address => vote_id - reverse lookup to quickly check if address exists *)
 field reverse_vote_contracts : Map ByStr20 Uint256 = Emp ByStr20 Uint256
@@ -90,6 +92,16 @@ procedure IsManager(address: ByStr20)
   end
 end
 
+procedure CheckBlocks(expiration_block: BNum, reg_end_block: BNum)
+  is_correct_time = builtin blt reg_end_block expiration_block;
+  match is_correct_time with
+  | True =>
+  | False =>
+    err = CodeInvalidRegistrationBlock;
+    ThrowError err
+  end
+end
+
 
 (* @dev: Adds a new voting contract address; used by managers only *)
 (* @param vote_address: New voting contract address that is deployed *)
@@ -98,6 +110,7 @@ end
 (* @param reg_end_block: block number that registration will end. After registration ends, users can start to vote *)
 transition AddVoteContract(vote_address: ByStr20, name: String, expiration_block: BNum, reg_end_block: BNum)
   IsManager _sender;
+  CheckBlocks expiration_block reg_end_block;
 
   some_vote_id <- reverse_vote_contracts[vote_address];
 
@@ -108,7 +121,7 @@ transition AddVoteContract(vote_address: ByStr20, name: String, expiration_block
     ThrowError err
   | None =>
     current_vote_id <- vote_id;
-    new_vote_details = VoteDetails vote_address name expiration_block reg_end_block;
+    new_vote_details = DemonVote vote_address name expiration_block reg_end_block;
     vote_contracts[current_vote_id] := new_vote_details;
     reverse_vote_contracts[vote_address] := current_vote_id;
 
@@ -128,7 +141,7 @@ transition DeleteVoteContract(id: Uint256)
   some_vote_details <- vote_contracts[id];
 
   match some_vote_details with
-  | Some (VoteDetails vote_address name expiration_block reg_end_block) =>
+  | Some (DemonVote vote_address name expiration_block reg_end_block) =>
     delete vote_contracts[id];
     delete reverse_vote_contracts[vote_address];
     e = { _eventname: "DeleteVoteContract"; vote_id: id; vote_address: vote_address };
