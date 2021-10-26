@@ -22,6 +22,7 @@ decimals: 18
 init_supply: 166666000000000000000000000
 ```
 
+\
 **2. Deploy ZRC1 demons contract**
 
 ```
@@ -29,6 +30,7 @@ name: DEM
 symbol: DEM
 ```
 
+\
 **3. Deploy claim distributor contract.**
 
 ```
@@ -44,6 +46,7 @@ Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/mast
 node deploy-claim.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [testnet / mainnet]
 ```
 
+\
 **4. Deploy crowd sale (line variant) contract.**
 
 ```
@@ -58,6 +61,7 @@ Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/mast
 node deploy-crowd-sale-v2.js [private_key] [0x_wallet_addr] [0x_dmz] [0x_demon_addr] [testnet / mainnet]
 ```
 
+\
 **5. Deploy lvl up contract**
 
 ```
@@ -72,6 +76,7 @@ Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/mast
  node deploy-lvlup.js [private_key] [0x_wallet] [0x_dmz_addr] [0x_claim_distributor_addr] [0x_demon_addr] [testnet / mainnet]
 ```
 
+\
 **6. Deploy name change contract**
 
 ```
@@ -85,8 +90,10 @@ Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/mast
 node deploy-name-change.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [testnet / mainnet]
 ```
 
+\
 **7. Deploy dummy marketplace contract.**
 
+\
 **8. Deploy auction contract**
 
 ```
@@ -102,6 +109,7 @@ Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/mast
 node deploy-auction.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [0x_marketplace_addr] [testnet / mainnet]
 ```
 
+\
 **9. Deploy marketplace contract**
 ```
 commission = 5
@@ -113,6 +121,7 @@ Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/mast
 node deploy-mp.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [0x_auction_addr] [testnet / mainnet]
 ```
 
+\
 **10. Update marketplace address from (9) in auctions contract**
 ```
 UpdateDirectListing(marketplace)
@@ -124,11 +133,13 @@ Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/mast
 node update-mp-listing.js [private_key] [0x_auction_addr] [0x_marketplace_addr] [testnet / mainnet]
 ```
 
+\
 **11. On the claim distributor contract, set the lvl up contract**
 ```
 SetLvlUp(lvlup_contract)
 ```
 
+\
 **12. On the demons contract, execute:**
 ```
 ConfigureMinter(crowd_sale_contract)
@@ -138,6 +149,7 @@ ConfigureMinter(namechange_contract)
 
 The above is to set the access for the crowd sale, lvlup and namechange contract as these contracts would need to change the demons' stats.
 
+\
 **13. On the dmz contract, swap to the `init_wallet` defined in crowd sale contract, execute:**
 ```
 IncreaseAllowance(crowd_sale_contract, 20000000000000000000000) // 200 DMZ * 100
@@ -145,6 +157,7 @@ IncreaseAllowance(crowd_sale_contract, 20000000000000000000000) // 200 DMZ * 100
 
 This is to allow the crowd sale contract to distribute the buy incentive (DMZ) from wallet.
 
+\
 **14. On the dmz contract, swap to the `init_wallet` defined in claim distributor contract, execute:**
 ```
 IncreaseAllowance(claim_distributor_contract, 150000000000000000000000) // 1500 DMZ * 100
@@ -152,10 +165,13 @@ IncreaseAllowance(claim_distributor_contract, 150000000000000000000000) // 1500 
 
 **Note**: the `init_wallet` in this step might be different from (13). Please check before executing.
 
+\
 **15. Transfer 200 DMZ * 100 to crowd sale wallet**
 
+\
 **16. Transfer 1500 DMZ * 100 to claim distributor wallet**
 
+\
 **17. Prepare the token_reserve.json file**
 
 Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/master/scripts/generate_token_reserve.js) and execute:
@@ -167,6 +183,7 @@ example
 node generate_token_reserve.js 1 666 https://gateway.pinata.cloud/ipfs/hash jpg
 ```
 
+\
 **18. On the crowd sale contract, execute:**
 ```
 AddReserveList()
@@ -176,6 +193,7 @@ Use the `token_reserve.json` data as the parameters.
 
 **Note**: Perform this step 5 mins before the sales start. Ensure that the list of demons URI is in reverse order, i.e. the images number should be in descending order, image_300.jpg, image_299.jpg and so on.
 
+\
 **19. On the crowd sale contract, execute:**
 ```
 UpdatePause()
