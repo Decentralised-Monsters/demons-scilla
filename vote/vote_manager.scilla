@@ -1,0 +1,210 @@
+scilla_version 0
+
+import IntUtils
+
+library VoteManager
+
+(* User-defined ADTs *)
+type Dummy =
+| Dummy
+
+
+(* ByStr20 - vote_address *)
+(* String - name *)
+(* BNum - expiration_block *)
+(* BNum - registration_end_block *)
+type DemonVote =
+  | DemonVote of ByStr20 String BNum BNum
+
+(* Error exceptions *)
+type Error =
+  | CodeNotAuthorized
+  | CodeContractAlreadyExists
+  | CodeInvalidVoteID
+  | CodeIsNotManager
+  | CodeInvalidRegistrationBlock
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeNotAuthorized             => Int32 -1
+      | CodeContractAlreadyExists     => Int32 -2
+      | CodeInvalidVoteID             => Int32 -3
+      | CodeIsNotManager              => Int32 -4
+      | CodeInvalidRegistrationBlock  => Int32 -5
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+let one256 = Uint256 1
+let verdad = Dummy
+    
+
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+
+contract VoteManager
+(
+    contract_owner: ByStr20
+)
+
+field owner: ByStr20 = contract_owner
+field pending_owner: Option ByStr20 = None {ByStr20}
+
+(* mapping of managers available *)
+field managers: Map ByStr20 Dummy =
+    let emp_map = Emp ByStr20 Dummy in
+    builtin put emp_map contract_owner verdad
+
+(* vote_id => contract address *)
+field vote_contracts : Map Uint256 DemonVote = Emp Uint256 DemonVote
+
+(* contract address => vote_id - reverse lookup to quickly check if address exists *)
+field reverse_vote_contracts : Map ByStr20 Uint256 = Emp ByStr20 Uint256
+field vote_id : Uint256 = Uint256 0
+
+(* Procedures *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsContractOwner()
+  current_owner <- owner;
+  is_contract_owner = builtin eq _sender current_owner;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotAuthorized;
+    ThrowError err 
+  end
+end
+
+procedure IsManager(address: ByStr20)
+  is_manager <- exists managers[address];
+  match is_manager with
+  | True =>
+  | False =>
+    err = CodeIsNotManager;
+    ThrowError err
+  end
+end
+
+procedure CheckBlocks(expiration_block: BNum, reg_end_block: BNum)
+  is_correct_time = builtin blt reg_end_block expiration_block;
+  match is_correct_time with
+  | True =>
+  | False =>
+    err = CodeInvalidRegistrationBlock;
+    ThrowError err
+  end
+end
+
+
+(* @dev: Adds a new voting contract address; used by managers only *)
+(* @param vote_address: New voting contract address that is deployed *)
+(* @param name: name of the vote  *)
+(* @param expiration_block: block number that the vote will end *)
+(* @param reg_end_block: block number that registration will end. After registration ends, users can start to vote *)
+transition AddVoteContract(vote_address: ByStr20, name: String, expiration_block: BNum, reg_end_block: BNum)
+  IsManager _sender;
+  CheckBlocks expiration_block reg_end_block;
+
+  some_vote_id <- reverse_vote_contracts[vote_address];
+
+  match some_vote_id with
+  | Some existing_vote_contract =>
+    (* contract already in manager *)
+    err = CodeContractAlreadyExists;
+    ThrowError err
+  | None =>
+    current_vote_id <- vote_id;
+    new_vote_details = DemonVote vote_address name expiration_block reg_end_block;
+    vote_contracts[current_vote_id] := new_vote_details;
+    reverse_vote_contracts[vote_address] := current_vote_id;
+
+    new_vote_id = builtin add current_vote_id one256;
+    vote_id := new_vote_id;
+
+    e = { _eventname: "AddVoteContract"; vote_id: current_vote_id; vote_address: vote_address };
+    event e
+  end
+end
+
+(* @dev: Deletes an existing voting contract address; used by managers only *)
+(* @param: id Vote id to be deleted *)
+transition DeleteVoteContract(id: Uint256)
+  IsManager _sender;
+
+  some_vote_details <- vote_contracts[id];
+
+  match some_vote_details with
+  | Some (DemonVote vote_address name expiration_block reg_end_block) =>
+    delete vote_contracts[id];
+    delete reverse_vote_contracts[vote_address];
+    e = { _eventname: "DeleteVoteContract"; vote_id: id; vote_address: vote_address };
+    event e
+  | None =>
+    (* do nothing; does not exists *)
+    err = CodeInvalidVoteID;
+    ThrowError err
+  end
+end
+
+(* @dev: Add or remove a manager; used by contract owner only *)
+(* managers have the rights to add or remove vote contracts *)
+(* @param manager: Address of the manager to add or remove *)
+transition ConfigureManager(manager: ByStr20)
+  IsContractOwner;
+  some_manager <- managers[manager];
+  
+  match some_manager with
+  | Some Dummy =>
+    (* remove manager *)
+    delete managers[manager];
+    e = { _eventname: "RemoveManagerSuccess"; manager: manager };
+    event e
+  | None =>
+    (* add manager *)
+    managers[manager] := verdad;
+    e = { _eventname: "AddManagerSuccess"; manager: manager };
+    event e
+  end
+end
+
+(* @dev: Sets a new contract owner; used by contract owner only. *)
+(* Current owner can abort the process by calling this transition with their own address *)
+(* @param: new_owner New owner address *)
+transition RequestOwnershipTransfer(new_owner: ByStr20)
+  IsContractOwner;
+  po = Some {ByStr20} new_owner;
+  pending_owner := po;
+  e = {_eventname: "RequestOwnershipTransfer"; new_owner: new_owner};
+  event e
+end
+
+(* @dev: New owner accepts the ownership transfer request; used by the new owner only. *)
+transition ConfirmOwnershipTransfer()
+  optional_po <- pending_owner;
+  match optional_po with
+  | Some pend_owner =>
+    caller_is_new_owner = builtin eq _sender pend_owner;
+    match caller_is_new_owner with
+    | True =>
+      (* transfer ownership *)
+      owner := pend_owner;
+      none = None {ByStr20};
+      pending_owner := none;
+      e = {_eventname: "ConfirmOwnershipTransfer"; new_owner: pend_owner};
+      event e
+    | False =>
+      (* caller is not the new owner, do nothing *)
+      err = CodeNotAuthorized;
+      ThrowError err
+    end
+  | None =>
+    (* ownership transfer is not in-progress, do nothing *)
+  end
+end
