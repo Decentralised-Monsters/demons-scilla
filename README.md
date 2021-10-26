@@ -13,7 +13,7 @@ Contracts:
   * [Liquidity](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/distributor)
 
 ## Order of Deployment
-1. Deploy ZRC2 dmz contract.
+**Deploy ZRC2 dmz contract.**
 
 ```
 name: DMZ
@@ -22,14 +22,14 @@ decimals: 18
 init_supply: 166666000000000000000000000
 ```
 
-1. Deploy ZRC1 demons contract.
+**Deploy ZRC1 demons contract**
 
 ```
 name: DEM
 symbol: DEM
 ```
 
-1. Deploy claim distributor contract.
+**Deploy claim distributor contract.**
 
 ```
 blocks_for_rewards = 2160
@@ -38,7 +38,7 @@ rewards = 1902587519025926
 1 day = 1902587519025926 * 2160 = 4109589041096000160 = 4.1 DMZ
 ```
 
-1. Deploy crowd sale (line variant) contract.
+**Deploy crowd sale (line variant) contract.**
 
 ```
 decimal = 25
@@ -46,7 +46,7 @@ price = 3000000000000000  // 3000 ZIL
 buy_incentive = 200000000000000000000  // 200 DMZ
 ```
 
-1. Deploy lvl up contract.
+**Deploy lvl up contract**
 
 ```
 max_lvl = 5
@@ -54,7 +54,7 @@ min_lvl_for_earn_reward = 2
 fee_multiplier = 100
 ```
 
-1. Deploy name change contract.
+**Deploy name change contract**
 
 ```
 min_lvl_for_change = 5
