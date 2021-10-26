@@ -13,7 +13,7 @@ Contracts:
   * [Liquidity](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/distributor)
 
 ## Order of Deployment
-**Deploy ZRC2 dmz contract.**
+**1. Deploy ZRC2 dmz contract.**
 
 ```
 name: DMZ
@@ -22,14 +22,14 @@ decimals: 18
 init_supply: 166666000000000000000000000
 ```
 
-**Deploy ZRC1 demons contract**
+**2. Deploy ZRC1 demons contract**
 
 ```
 name: DEM
 symbol: DEM
 ```
 
-**Deploy claim distributor contract.**
+**3. Deploy claim distributor contract.**
 
 ```
 blocks_for_rewards = 2160
@@ -38,7 +38,13 @@ rewards = 1902587519025926
 1 day = 1902587519025926 * 2160 = 4109589041096000160 = 4.1 DMZ
 ```
 
-**Deploy crowd sale (line variant) contract.**
+Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/master/scripts/deploy-claim.js) and execute:
+
+```
+node deploy-claim.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [testnet / mainnet]
+```
+
+**4. Deploy crowd sale (line variant) contract.**
 
 ```
 decimal = 25
@@ -46,7 +52,13 @@ price = 3000000000000000  // 3000 ZIL
 buy_incentive = 200000000000000000000  // 200 DMZ
 ```
 
-**Deploy lvl up contract**
+Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/master/scripts/deploy-crowd-sale-v2.js) and execute:
+
+```
+node deploy-crowd-sale-v2.js [private_key] [0x_wallet_addr] [0x_dmz] [0x_demon_addr] [testnet / mainnet]
+```
+
+**5. Deploy lvl up contract**
 
 ```
 max_lvl = 5
@@ -54,27 +66,42 @@ min_lvl_for_earn_reward = 2
 fee_multiplier = 100
 ```
 
-**Deploy name change contract**
+Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/master/scripts/deploy-lvlup.js) and execute:
+
+```
+ node deploy-lvlup.js [private_key] [0x_wallet] [0x_dmz_addr] [0x_claim_distributor_addr] [0x_demon_addr] [testnet / mainnet]
+```
+
+**6. Deploy name change contract**
 
 ```
 min_lvl_for_change = 5
 price_for_change = 250000000000000000000 // 250 DMZ
 ```
 
-1. Deploy dummy marketplace contract.
-1. Deploy auctions contract, set the marketplace addr as the dummy one.
-1. Deploy marketplace contract.
-1. Update auctions contract, `UpdateDirectListing(marketplace)`.
+Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/master/scripts/deploy-name-change.js) and execute:
 
-## Post Deployment
-1. Update claim distributor - lvl up address `SetLvlUp(lvlup_addr)`
-1. Add demon image URI in crowd sale contract, `AddReserveList(['image_uri_666', 'image_uri_665', '664'])` in **reverse order**
-1. Invoke demons contract, `ConfigureMinter(crowd_sale)`, `ConfigureMinter(lvl_up)` and `ConfigureMinter(name_change)`
-1. As the `wallet` defined in the crowd sale contract, call `IncreaseAllowance(crowd_sale, amt)` to allow crowd sale contract to distribute the buy incentives (DMZ) from `wallet`.
-1. As the `wallet` defined in the claim distributor contract, call `IncreaseAllowance(claim, amt)` to allow the claim distributor to transfer the rewards from `wallet`.
-1. Before the sale begins, in the crowd sale contract, call `UpdatePause()` to unpause the contract so that people can begin to `Buy()`.
+```
+node deploy-name-change.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [testnet / mainnet]
+```
 
-## Maintenance
+**7. Deploy dummy marketplace contract.**
+
+**8. Deploy auction contract**
+
+```
+max_dmz = 16666660000000000000000000
+commission = 5
+min_increment = 5
+min_auction_price = 1000000000000000000   // 1 DMZ
+```
+
+Open [scripts](https://github.com/Decentralised-Monsters/demons-scilla/blob/master/scripts/deploy-auction.js) and execute:
+
+```
+node deploy-auction.js [private_key] [0x_comm_wallet] [0x_dmz_addr] [0x_demon_addr] [0x_marketplace_addr] [testnet / mainnet]
+```
+
 
 
 ## Ownership Transfer
