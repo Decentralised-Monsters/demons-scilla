@@ -85,7 +85,6 @@ contract VoteManager
     field vote_id : Uint256 = Uint256 0
 ```
 
-\
 ## Vote Contract
  * **owner_register** - owner only transition to call register the list of voters addresses so that they can have the rights to vote.
  * - addresses (List ByStr20) - list of vote address
