@@ -6,16 +6,17 @@ const fs = require('fs');
 function main() {
     const myArgs = process.argv.slice(2);
 
-    if (myArgs.length < 3) {
+    if (myArgs.length < 4) {
         console.error("Wrong arguments\n");
-        console.log("node generate_token_reserve.js [start_number] [end_number] [pinata_uri]");
-        console.log("\nexample:\nnode generate_token_reserve.js 1 666 https://gateway.pinata.cloud/ipfs/hash");
+        console.log("node generate_token_reserve.js [start_number] [end_number] [pinata_uri] [img_format]");
+        console.log("\nexample:\nnode generate_token_reserve.js 1 666 https://gateway.pinata.cloud/ipfs/hash jpg");
         return;
     }
 
     const startIndex = Number(myArgs[0]) - 1; // minus 1 for the for-loop
     const endIndex = Number(myArgs[1]);
     const pinata = myArgs[2];
+    const imgFormat = myArgs[3];
 
     const tokens = [];
     
@@ -28,7 +29,7 @@ function main() {
             imgNumStr = `${i}`;
         }
 
-        const imgURI = `${pinata}/${imgNumStr}.jpg`;
+        const imgURI = `${pinata}/${imgNumStr}.${imgFormat}`;
         tokens.push(imgURI);
     }
 

@@ -1,22 +1,66 @@
 # Demons contracts.
 
 Contracts:
-  * [Main ZRC1](https://github.com/hicaru/demons-scilla/blob/master/ZRC1/nft-demons.scilla)
-  * [Main DMZ ZRC2](https://github.com/hicaru/demons-scilla/blob/master/ZRC2/dmz.scilla)
-  * [Auction](https://github.com/hicaru/demons-scilla/tree/master/auction)
-  * [claim DMZ](https://github.com/hicaru/demons-scilla/tree/master/claim)
-  * [crowd-sale](https://github.com/hicaru/demons-scilla/tree/master/crowd-sale)
-  * [lvl-up](https://github.com/hicaru/demons-scilla/tree/master/lvl)
-  * [name-change](https://github.com/hicaru/demons-scilla/tree/master/name-change)
-  * [market-place](https://github.com/hicaru/demons-scilla/tree/master/market-place)
+  * [Main ZRC1](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/ZRC1/nft-demons.scilla)
+  * [Main DMZ ZRC2](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/ZRC2/dmz.scilla)
+  * [Claim DMZ (DeMons Self Generate Rewards)](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/claim)
+  * [Crowd Sale](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/crowd-sale)
+  * [Level Up](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/lvl)
+  * [Name Change](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/name-change)
+  * [Marketplace](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/market-place)
+  * [Auction](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/auction)
+  * [Voting](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/vote)
+  * [Liquidity](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/distributor)
 
 ## Order of Deployment
 1. Deploy ZRC2 dmz contract.
+
+```
+name: DMZ
+symbol: DMZ
+decimals: 18
+init_supply: 166666000000000000000000000
+```
+
 1. Deploy ZRC1 demons contract.
+
+```
+name: DEM
+symbol: DEM
+```
+
 1. Deploy claim distributor contract.
+
+```
+blocks_for_rewards = 2160
+rewards = 1902587519025926
+
+1 day = 1902587519025926 * 2160 = 4109589041096000160 = 4.1 DMZ
+```
+
 1. Deploy crowd sale (line variant) contract.
+
+```
+decimal = 25
+price = 3000000000000000  // 3000 ZIL
+buy_incentive = 200000000000000000000  // 200 DMZ
+```
+
 1. Deploy lvl up contract.
+
+```
+max_lvl = 5
+min_lvl_for_earn_reward = 2
+fee_multiplier = 100
+```
+
 1. Deploy name change contract.
+
+```
+min_lvl_for_change = 5
+price_for_change = 250000000000000000000 // 250 DMZ
+```
+
 1. Deploy dummy marketplace contract.
 1. Deploy auctions contract, set the marketplace addr as the dummy one.
 1. Deploy marketplace contract.
@@ -37,7 +81,7 @@ Contracts:
 If ownership is transferred, the following have to be updated:
 1. Demons contract, call `ConfigureMinter` to remove previous owner and add new owner as minter.
 
-### 1: [Deploy Main ZRC1 contract:](https://github.com/hicaru/demons-scilla/blob/master/ZRC1/nft-demons.scilla)
+### 1: [Deploy Main ZRC1 contract:](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/ZRC1/nft-demons.scilla)
 
 Init:
 ```json
@@ -61,7 +105,7 @@ Init:
 ```
 => "0xeb9b2acf86d52c900fc01852bb351ebc91c96f38"
 
-### 2: [Deploy Main ZRC2 (DMZ) contract:]((https://github.com/hicaru/demons-scilla/blob/master/ZRC2/dmz.scilla))
+### 2: [Deploy Main ZRC2 (DMZ) contract:]((https://github.com/Decentralised-Monsters/demons-scilla/tree/master/ZRC2/dmz.scilla))
 
 Init:
 ```json
@@ -95,7 +139,7 @@ Init:
 ```
 => "0xda914bcb7ad629b0ba3f84b33ab668faa4519ca0"
 
-### 3: [Deploy Claim DMZ rewards contract:](https://github.com/hicaru/demons-scilla/tree/master/claim)
+### 3: [Deploy Claim DMZ rewards contract:](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/claim)
 
 Init:
 ```json
@@ -122,7 +166,7 @@ Init:
 After deploy you need send some `DMZ` tokens to this contract, this tokens will be useing as rewards.
 example: [viewblock](https://viewblock.io/zilliqa/tx/0x9e32146bdf76326977afbd79de2160017eb20f9ee668e52745eaa989fdd5b229?network=testnet)
 
-### 4: [Deploy CrowdSale contract:](https://github.com/hicaru/demons-scilla/tree/master/crowd-sale)
+### 4: [Deploy CrowdSale contract:](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/crowd-sale)
 
 Init:
 ```json
@@ -158,7 +202,7 @@ example: [viewblock](https://viewblock.io/zilliqa/tx/0xb442e9058531c95f8f7f7f0a3
 Also this CrowdSale contract should be minter, you need call on `Main` contract need call `ConfigureMinter` with `minter` = "0xa8c7405241ade8cb289e540568648acd1c014c24"
 example: [viewblock](https://viewblock.io/zilliqa/tx/0x9b92b7e58d8a75d736f03d9358f68478ddeca9167545cb053ccb2b781f03eb8b?network=testnet)
 
-### 5: [Deploy NameChange contract:](https://github.com/hicaru/demons-scilla/tree/master/name-change)
+### 5: [Deploy NameChange contract:](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/name-change)
 
 Init:
 ```json
@@ -190,7 +234,7 @@ Init:
 Also this NameChange contract should be minter, you need call on `Main` contract need call `ConfigureMinter` with `minter` = "0x1091f96a72677c8bea1cae379eeac8713a6e6ea6"
 example: [viewblock](https://viewblock.io/zilliqa/tx/a3ffafabe603b299b92a43137f49acdadca5da58e40c214a222885004dd89888?network=testnet)
 
-### 6: [Deploy level-up contract:](https://github.com/hicaru/demons-scilla/tree/master/lvl)
+### 6: [Deploy level-up contract:](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/lvl)
 
 Init:
 ```json
@@ -222,7 +266,7 @@ Init:
 Also this level-up contract should be minter, you need call on `Main` contract need call `ConfigureMinter` with `minter` = "0x1091f96a72677c8bea1cae379eeac8713a6e6ea6"
 example: [viewblock](https://viewblock.io/zilliqa/tx/4665571b18bdb0acad2f105212aea77217b35add8ef064db15c6a0efa810fbf8?network=testnet)
 
-### 7: [Deploy Auction contract:](https://github.com/hicaru/demons-scilla/tree/master/auction)
+### 7: [Deploy Auction contract:](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/auction)
 
 Before deploying auction contract, we need to deploy [dummy marketplace contract](/market-place/dummy_marketplace.scilla). Why? Because the auction contract requires the marketplace contract address as immutable field. We can deploy auction or marketplace first, but anyhow we need one of it to be dummy first.
 
@@ -274,7 +318,7 @@ Init:
 Remeber to execute `UpdateDirectListing` to replace to dummy marketplace address once you have deployed the actual marketplace contract!
 
 
-### 7: [Deploy MarketPlace contract:](https://github.com/hicaru/demons-scilla/tree/master/market-place)
+### 7: [Deploy MarketPlace contract:](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/market-place)
 
 Init:
 ```json
