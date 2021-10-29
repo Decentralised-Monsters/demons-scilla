@@ -182,6 +182,7 @@ let is_bid_map_empty =
     let map_size = builtin size m in
     builtin eq map_size zero32
 
+
 (***************************************************)
 (*             The contract definition             *)
 (***************************************************)
@@ -243,9 +244,11 @@ procedure IsContractOwner()
   end
 end
 
-procedure EmitBidEvent(highest_binding_bid: Uint128, highest_bidder: ByStr20)
+procedure EmitBidEvent(auction_id: Uint256, token_id: Uint256, highest_binding_bid: Uint128, highest_bidder: ByStr20)
   e = {
     _eventname: "BidEventSuccess";
+    auction_id: auction_id;
+    token_id: token_id;
     highest_binding_bid: highest_binding_bid;
     highest_bidder: highest_bidder
   };
@@ -539,6 +542,40 @@ procedure UpdateCounter(id: Uint256, op: Operation)
   end
 end
 
+procedure IncrementBidCount(current_bid: Uint128, id: Uint256)
+  is_zero = builtin eq current_bid zero128;
+  
+  match is_zero with
+    | True =>
+      (* new unique bidder; record the count *)
+      some_bid_count <- bid_count[id];
+      current_bid_count = option_uint64 zero64 some_bid_count;
+      new_bid_count = builtin add current_bid_count one64;
+      bid_count[id] := new_bid_count
+    | False =>
+      (* existing bidder; do nothing; don't increase count *)
+  end
+end
+
+procedure DecreaseBidCount(id: Uint256)
+  some_bid_count <- bid_count[id];
+
+  match some_bid_count with
+    | Some existing_count =>
+      new_bid_count = builtin sub existing_count one64;
+      is_zero = builtin eq new_bid_count zero64;
+      
+      match is_zero with
+      | True =>
+        delete bid_count[id]
+      | False =>
+        bid_count[id] := new_bid_count
+      end
+    | None =>
+      (* no such auction id *)
+  end
+end
+
 procedure CallTransferFromDMZ(amount: Uint128, from: ByStr20, to: ByStr20)
   is_zero = builtin eq amount zero128;
   match is_zero with
@@ -581,8 +618,15 @@ procedure ReturnFunds(id: Uint256, to: ByStr20)
 
   match some_amount with
   | Some amount =>
+    CallTransferDMZ to amount;
     DeleteFundsByBidder to id;
-    CallTransferDMZ to amount
+    e = {
+      _eventname: "ReturnFunds";
+      auction_id: id;
+      recipient: to;
+      amount: amount
+    };
+    event e
   | None =>
   end
 end
@@ -657,6 +701,7 @@ transition CreateAuction(bid_increment: Uint128, min_price: Uint128, start_block
     e = {
       _eventname: "AuctionCreated";
       owner: _sender;
+      auction_id: next_id;
       auction: new_auction
     };
     event e
@@ -700,13 +745,6 @@ transition PlaceBid(id: Uint256, amount: Uint128)
         OnlyNotAuctionOwner auction_owner;
         CheckBidAmount new_bid highest_binding_bid bid_increment;
 
-        (* update bid count only after checks *)
-        match some_current_bid with
-        | Some current_bid =>
-        | None =>
-          UpdateCounter id add_operation
-        end;
-
         (* transfer the required dmz to this contract *)
         CallTransferFromDMZ amount _sender _this_address;
 
@@ -730,7 +768,9 @@ transition PlaceBid(id: Uint256, amount: Uint128)
           new_highest_binding_bid = min new_highest_binding_bid new_bid;
           new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
           auctions[id] := new_auction;
-          EmitBidEvent new_highest_binding_bid _sender
+
+          IncrementBidCount current_bid id;
+          EmitBidEvent id token_id new_highest_binding_bid _sender
         | False =>
           (* listing has existing bids *)
           match is_raise_self_bid with
@@ -746,7 +786,9 @@ transition PlaceBid(id: Uint256, amount: Uint128)
             new_highest_binding_bid = min new_highest_binding_bid highest_bid;
             new_auction = Auction canceled new_highest_binding_bid highest_bidder owner_has_withdrawn static;
             auctions[id] := new_auction;
-            EmitBidEvent new_highest_binding_bid highest_bidder
+
+            IncrementBidCount current_bid id;
+            EmitBidEvent id token_id new_highest_binding_bid highest_bidder
           | False =>
             (* user has bid more than highest bid *)
             (* set user as the new highestBidder and recalculate highestBindingBid. *)
@@ -756,7 +798,9 @@ transition PlaceBid(id: Uint256, amount: Uint128)
             new_highest_binding_bid = min new_bid new_highest_binding_bid;
             new_auction = Auction canceled new_highest_binding_bid _sender owner_has_withdrawn static;
             auctions[id] := new_auction;
-            EmitBidEvent new_highest_binding_bid _sender
+
+            IncrementBidCount current_bid id;
+            EmitBidEvent id token_id new_highest_binding_bid _sender
           end
         end
       end
@@ -795,12 +839,15 @@ transition CancelAuction(id: Uint256)
           new_canceled = True;
           new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
           auctions[id] := new_auction;
-          UpdateCounter id sub_operation;
+
           TransferNFT _sender token_id;
+          delete bid_count[id];
           delete token_auctions[token_id];
+          DeleteAuction id;
           e = {
             _eventname: "CanceledEventSuccess";
-            id: id
+            auction_id: id;
+            token_id: token_id
           };
           event e
         | False =>
@@ -850,7 +897,6 @@ transition Withdraw(id: Uint256)
           (* highest bidder exists *)
           is_highest_bidder = builtin eq highest_bidder _sender;
           is_auction_owner = builtin eq auction_owner _sender;
-          UpdateCounter id sub_operation;
 
           match is_auction_owner with
           | True =>
@@ -873,13 +919,24 @@ transition Withdraw(id: Uint256)
               com = muldiv dev_commission highest_binding_bid one_hundred128;
               value = builtin sub highest_binding_bid com;
   
-              DeleteFundsByBidder highest_bidder id;
-  
               wallet_o <- wallet;
               CallTransferDMZ highest_bidder extra;
               CallTransferDMZ auction_owner value;
               CallTransferDMZ wallet_o com;
-              DeleteAuction id
+              
+              DecreaseBidCount id;
+              DeleteFundsByBidder highest_bidder id;
+              DeleteAuction id;
+
+              e = {
+                _eventname: "WithdrawCollectProfits";
+                auction_owner: auction_owner;
+                auction_id: id;
+                token_id: token_id;
+                profits: value;
+                msg: "owner collect profits"
+              };
+              event e
             end
           | False =>
             (* other bidders *)
@@ -888,13 +945,32 @@ transition Withdraw(id: Uint256)
               (* user is highest bidder; transfer card ownership to winner *)
               (* remove the token_id mapping to allow new owner to place it for auction *)
               TransferNFT _sender token_id;
+              DecreaseBidCount id;
               DeleteAuction id;
-              delete token_auctions[token_id]
+              delete token_auctions[token_id];
+
+              e = {
+                _eventname: "WithdrawCollectDemon";
+                auction_owner: auction_owner;
+                auction_id: id;
+                token_id: token_id;
+                msg: "winner collect demon"
+              };
+              event e
             | False =>
               (* user did not win bid; refund back locked up DMZ *)
               ReturnFunds id _sender;
+              DecreaseBidCount id;
               DeleteAuction id;
-              DeleteFundsByBidder _sender id
+
+              e = {
+                _eventname: "WithdrawCollectRefunds";
+                auction_owner: auction_owner;
+                auction_id: id;
+                token_id: token_id;
+                msg: "participant collect refunds"
+              };
+              event e
             end
           end
         end
