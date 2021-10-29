@@ -106,7 +106,7 @@ field pending_owner: Option ByStr20 = None {ByStr20}
 field dmz: ByStr20 = init_dmz
 field wallet: ByStr20 = init_wallet
 field pause: Uint32 = on_pause
-field payment_mode: Uint32 = payment_mode_zil
+field payment_mode: Uint32 = payment_mode_dmz
 
 (* Total token count *)
 field reserve: Uint256 = zero256
@@ -114,7 +114,7 @@ field total: Uint256 = zero256
 
 field tokens_reserve: Map Uint256 String = Emp Uint256 String
 field decimal: Uint256 = Uint256 25
-field price: Uint256 = Uint256 3000000000000000
+field price: Uint256 = Uint256 450000000000000000000
 field buy_incentive: Uint128 = Uint128 200000000000000000000
 
 (* Emit Errors *)
