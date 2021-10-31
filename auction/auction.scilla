@@ -27,6 +27,8 @@ type Error =
 | CodePauseNotPause
 | CodeInputOutOfRange
 | CodeWithdrawNoBid
+| CodeAlreadyWithdrawn
+| CodeBidderNoFunds
 
 (* custom ADT owner, bidIncrement, startBlock, endBlock, tokenID *)
 type StaticAuction =
@@ -95,6 +97,8 @@ let make_error =
       | CodePauseNotPause                => Int32 -19 
       | CodeInputOutOfRange              => Int32 -20
       | CodeWithdrawNoBid                => Int32 -21
+      | CodeAlreadyWithdrawn             => Int32 -22
+      | CodeBidderNoFunds                => Int32 -23
       end
     in
     { _exception : "Error"; code : result_code }
@@ -906,37 +910,45 @@ transition Withdraw(id: Uint256)
               err = CodeIsAuctionOwner;
               ThrowError err
             | False =>
-              (* owner claiming the winning bid *)
-              some_bid_amount <- funds_by_bidder[highest_bidder][id];
-  
-              new_owner_has_withdrawn = True;
-              new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
-              auctions[id] := new_auction;
-              
-              (* winner to pay only highest binding bid, remainder to be refunded *)
-              amount = option_uint128 zero128 some_bid_amount;
-              extra = builtin sub amount highest_binding_bid;
-              com = muldiv dev_commission highest_binding_bid one_hundred128;
-              value = builtin sub highest_binding_bid com;
-  
-              wallet_o <- wallet;
-              CallTransferDMZ highest_bidder extra;
-              CallTransferDMZ auction_owner value;
-              CallTransferDMZ wallet_o com;
-              
-              DecreaseBidCount id;
-              DeleteFundsByBidder highest_bidder id;
-              DeleteAuction id;
+              match owner_has_withdrawn with
+              | True =>
+                (* owner withdraw already *)
+                err = CodeAlreadyWithdrawn;
+                ThrowError err
+              | False =>
+                (* owner have not withdrawn *)
+                (* owner claiming the winning bid *)
+                some_bid_amount <- funds_by_bidder[highest_bidder][id];
+    
+                new_owner_has_withdrawn = True;
+                new_auction = Auction canceled highest_binding_bid highest_bidder new_owner_has_withdrawn static;
+                auctions[id] := new_auction;
+                
+                (* winner to pay only highest binding bid, remainder to be refunded *)
+                amount = option_uint128 zero128 some_bid_amount;
+                extra = builtin sub amount highest_binding_bid;
+                com = muldiv dev_commission highest_binding_bid one_hundred128;
+                value = builtin sub highest_binding_bid com;
+    
+                wallet_o <- wallet;
+                CallTransferDMZ highest_bidder extra;
+                CallTransferDMZ auction_owner value;
+                CallTransferDMZ wallet_o com;
+                
+                DecreaseBidCount id;
+                DeleteFundsByBidder highest_bidder id;
+                DeleteAuction id;
 
-              e = {
-                _eventname: "WithdrawCollectProfits";
-                auction_owner: auction_owner;
-                auction_id: id;
-                token_id: token_id;
-                profits: value;
-                msg: "owner collect profits"
-              };
-              event e
+                e = {
+                  _eventname: "WithdrawCollectProfits";
+                  auction_owner: auction_owner;
+                  auction_id: id;
+                  token_id: token_id;
+                  profits: value;
+                  msg: "owner collect profits"
+                };
+                event e
+              end
             end
           | False =>
             (* other bidders *)
@@ -959,18 +971,26 @@ transition Withdraw(id: Uint256)
               event e
             | False =>
               (* user did not win bid; refund back locked up DMZ *)
-              ReturnFunds id _sender;
-              DecreaseBidCount id;
-              DeleteAuction id;
+              some_bids <- funds_by_bidder[_sender][id];
+              
+              match some_bids with
+              | Some locked_bids =>
+                ReturnFunds id _sender;
+                DecreaseBidCount id;
+                DeleteAuction id;
 
-              e = {
-                _eventname: "WithdrawCollectRefunds";
-                auction_owner: auction_owner;
-                auction_id: id;
-                token_id: token_id;
-                msg: "participant collect refunds"
-              };
-              event e
+                e = {
+                  _eventname: "WithdrawCollectRefunds";
+                  auction_owner: auction_owner;
+                  auction_id: id;
+                  token_id: token_id;
+                  msg: "participant collect refunds"
+                };
+                event e
+              | None =>
+                err = CodeBidderNoFunds;
+                ThrowError err
+              end
             end
           end
         end
