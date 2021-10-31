@@ -1045,12 +1045,16 @@ end
 
 (* @dev: Transfer DMZ from auction contract to a target address; used by contract owner only *)
 (* used only for emergencies in the event that a user wrongly transferred DMZ into the auction contract *)
-transition DrainDMZ(recipient: ByStr20, amount: Uint128)
+(* check the historical transactions to verify the dmz amount *)
+(* @param recipient: address to receive the DMZ *)
+(* @param amount: dmz amount to send *)
+transition UnlockDMZ(recipient: ByStr20, amount: Uint128)
   IsContractOwner;
   CallTransferDMZ recipient amount;
-  e = {_eventname : "DrainDMZ"; recipient: recipient; amount: amount};
+  e = {_eventname : "UnlockDMZ"; recipient: recipient; amount: amount};
   event e
 end
+
 
 (* @dev: Sets a new contract owner; used by contract owner only. *)
 (* Current owner can abort the process by calling this transition with their own address *)
