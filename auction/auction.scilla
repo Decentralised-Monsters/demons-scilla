@@ -530,22 +530,6 @@ procedure DeleteFundsByBidder(bidder: ByStr20, auction_id: Uint256)
 end
 
 
-procedure UpdateCounter(id: Uint256, op: Operation)
-  some_bid_count <- bid_count[id];
-
-  current_count_bid = option_uint64 zero64 some_bid_count;
-  new_counter = new_counter current_count_bid op;
-  is_zero = builtin eq new_counter zero64;
-
-  match is_zero with
-  | True =>
-    delete bid_count[id];
-    delete auctions[id]
-  | False =>
-    bid_count[id] := new_counter
-  end
-end
-
 procedure IncrementBidCount(current_bid: Uint128, id: Uint256)
   is_zero = builtin eq current_bid zero128;
   
@@ -617,23 +601,6 @@ procedure CallTransferDMZ(to: ByStr20, amount: Uint128)
   end
 end
 
-procedure ReturnFunds(id: Uint256, to: ByStr20)
-  some_amount <- funds_by_bidder[to][id];
-
-  match some_amount with
-  | Some amount =>
-    CallTransferDMZ to amount;
-    DeleteFundsByBidder to id;
-    e = {
-      _eventname: "ReturnFunds";
-      auction_id: id;
-      recipient: to;
-      amount: amount
-    };
-    event e
-  | None =>
-  end
-end
 
 procedure TransferFromNFT(to: ByStr20, token_id: Uint256)
   transfered = {
@@ -975,7 +942,8 @@ transition Withdraw(id: Uint256)
               
               match some_bids with
               | Some locked_bids =>
-                ReturnFunds id _sender;
+                CallTransferDMZ _sender locked_bids;
+                DeleteFundsByBidder _sender id;
                 DecreaseBidCount id;
                 DeleteAuction id;
 
@@ -1072,6 +1040,15 @@ transition UpdatePause()
   end;
   updated_pause <- pause;
   e = {_eventname : "UpdatePause"; pause: updated_pause};
+  event e
+end
+
+(* @dev: Transfer DMZ from auction contract to a target address; used by contract owner only *)
+(* used only for emergencies in the event that a user wrongly transferred DMZ into the auction contract *)
+transition DrainDMZ(recipient: ByStr20, amount: Uint128)
+  IsContractOwner;
+  CallTransferDMZ recipient amount;
+  e = {_eventname : "DrainDMZ"; recipient: recipient; amount: amount};
   event e
 end
 
