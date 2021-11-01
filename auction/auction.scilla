@@ -782,11 +782,7 @@ transition PlaceBid(id: Uint256, amount: Uint128)
   end
 end
 
-(* @dev Allows the owner to drop the auction listing if the auction has no bids or the auction has ended without any bids *)
-(* @param id: Auction id to cancel *)
-transition CancelAuction(id: Uint256)
-  CheckPause not_pause;
-  current_block <-& BLOCKNUMBER;
+procedure ExecuteCancelAuction(id: Uint256)
   some_auction <- auctions[id];
 
   match some_auction with
@@ -811,12 +807,12 @@ transition CancelAuction(id: Uint256)
           new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
           auctions[id] := new_auction;
 
-          TransferNFT _sender token_id;
+          TransferNFT auction_owner token_id;
           delete bid_count[id];
           delete token_auctions[token_id];
           DeleteAuction id;
           e = {
-            _eventname: "CanceledEventSuccess";
+            _eventname: "ExecuteCancelAuction";
             auction_id: id;
             token_id: token_id
           };
@@ -833,6 +829,22 @@ transition CancelAuction(id: Uint256)
     err = CodeNotFound;
     ThrowError err
   end
+end
+
+
+(* @dev Allows the owner to drop the auction listing if the auction has no bids or the auction has ended without any bids *)
+(* @param id: Auction id to cancel *)
+transition CancelAuction(id: Uint256)
+  CheckPause not_pause;
+  ExecuteCancelAuction id
+end
+
+(* @dev used only by contract owner in the event that the auction contract needs to be updated *)
+(* auction must not have any bids or the auction has ended without any bids *)
+(* @param id: Auction id to cancel *)
+transition CancelAuctionAdmin(id: Uint256)
+  IsContractOwner;
+  ExecuteCancelAuction id
 end
 
 
