@@ -12,6 +12,8 @@ Our auction contract will have a simple interface that allows users to place bid
  * - _amount (Uint128) - value of DMZ.
  * **CancelAuction** - A transition for cancel auction (auction creator only.)
  * - id (Uint256) - The id of auction.
+ * **CancelAuctionAdmin** - A transition for cancel auction; used in emergencies (admin only)
+ * - id (Uint256) - The id of auction.
  * **Withdraw** - A transition for withdraw funds or token if sender is leader of auction.
  * - id (Uint256) - The id of auction.
  * **UpdateCommission** - A owner transition for change dev commission.
@@ -27,6 +29,9 @@ Our auction contract will have a simple interface that allows users to place bid
  * **UpdateMinIncrement** - A owner transition to update the minimum increment rate required when users create an auction.
  * - new_min_increment (Uint128) - The new minimum increment rate in percentage.
  * **UpdatePause** - A owner transition to pause / unpause the contract.
+ * **UnlockDMZ** - A owner transition to transfer locked DMZ from auction contract to a target address
+ * - recipient (ByStr20) - target address receiving the DMZ
+ * - amount (Uint128) - DMZ amount
  * **RequestOwnershipTransfer** - Owner only transition to change owner. Current owner can abort process by call the transition with their own address.
  * - new_owner (ByStr20) - new owner address
  * **ConfirmOwnershipTransfer** - New contract owner can accept the ownership transfer request.
@@ -43,6 +48,7 @@ contract AuctionFactory
 ## Owner Transitions
 ```Ocaml
 contract AuctionFactory
+  CancelAuctionAdmin(id: Uint256)
   UpdateCommission(new_commission: Uint128)
   UpdateDirectListing(new_marketplace: ByStr20 with contract field token_orderbook: Map Uint256 Uint256 end)
   UpdateDMZ(new_dmz: ByStr20)
@@ -50,6 +56,7 @@ contract AuctionFactory
   UpdateMinAuctionPrice(new_min_auction_price: Uint128)
   UpdateMinIncrement(new_min_increment: Uint128)
   UpdatePause()
+  UnlockDMZ(recipient: ByStr20, amount: Uint128)
   RequestOwnershipTransfer(new_owner: ByStr20)
   ConfirmOwnershipTransfer()
 ```
@@ -157,6 +164,8 @@ bid_increment = 10%
  * CodePauseNotPause - If the check paused or unpaused fails.
  * CodeInputOutOfRange - If the input increment or price is out of range.
  * CodeWithdrawNoBid - If users invoke `Withdraw` on an auction without any bids.
+ * CodeAlreadyWithdrawn - If auction owner had already withdrawn the profits
+ * CodeBidderNoFunds - If the user already withdraw their locked funds or don't have funds to withdraw
 
 ```Ocaml
 contract AuctionFactoryLib
@@ -182,6 +191,8 @@ contract AuctionFactoryLib
     | CodePauseNotPause                => Int32 -19 
     | CodeInputOutOfRange              => Int32 -20
     | CodeWithdrawNoBid                => Int32 -21
+    | CodeAlreadyWithdrawn             => Int32 -22
+    | CodeBidderNoFunds                => Int32 -23
 ```
 
 

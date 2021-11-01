@@ -494,8 +494,10 @@ procedure DeleteAuction(id: Uint256)
         (* some users have not withdrawn *)
       | None =>
         (* no such id; all users withdrawn *)
-        match owner_has_withdrawn with
+        is_withdraw_or_cancel = orb canceled owner_has_withdrawn;
+        match is_withdraw_or_cancel with
         | True =>
+          (* owner has cancel auction or withdraw the profits *)
           (* clear to delete this entry *)
           delete auctions[id]
         | False =>
@@ -782,7 +784,11 @@ transition PlaceBid(id: Uint256, amount: Uint128)
   end
 end
 
-procedure ExecuteCancelAuction(id: Uint256)
+
+(* @dev Allows the owner to drop the auction listing if the auction has no bids or the auction has ended without any bids *)
+(* @param id: Auction id to cancel *)
+transition CancelAuction(id: Uint256)
+  CheckPause not_pause;
   some_auction <- auctions[id];
 
   match some_auction with
@@ -792,7 +798,7 @@ procedure ExecuteCancelAuction(id: Uint256)
       OnlyNotCanceled canceled;
       match static with
       | StaticAuction auction_owner bid_increment start_block end_block token_id =>
-        OnlyAuctionOwner auction_owner;
+        OnlyAuctionOwner _sender;
 
         (* check if highest bidder is auction_owner *)
         (* if so, this implies no one has bid; can proceed with cancelling *)
@@ -806,13 +812,13 @@ procedure ExecuteCancelAuction(id: Uint256)
           new_canceled = True;
           new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
           auctions[id] := new_auction;
-
+      
           TransferNFT auction_owner token_id;
           delete bid_count[id];
           delete token_auctions[token_id];
           DeleteAuction id;
           e = {
-            _eventname: "ExecuteCancelAuction";
+            _eventname: "CancelAuction";
             auction_id: id;
             token_id: token_id
           };
@@ -831,20 +837,56 @@ procedure ExecuteCancelAuction(id: Uint256)
   end
 end
 
-
-(* @dev Allows the owner to drop the auction listing if the auction has no bids or the auction has ended without any bids *)
-(* @param id: Auction id to cancel *)
-transition CancelAuction(id: Uint256)
-  CheckPause not_pause;
-  ExecuteCancelAuction id
-end
-
 (* @dev used only by contract owner in the event that the auction contract needs to be updated *)
 (* auction must not have any bids or the auction has ended without any bids *)
 (* @param id: Auction id to cancel *)
 transition CancelAuctionAdmin(id: Uint256)
   IsContractOwner;
-  ExecuteCancelAuction id
+  some_auction <- auctions[id];
+
+  match some_auction with
+  | Some auction =>
+    match auction with
+    | Auction canceled highest_binding_bid highest_bidder owner_has_withdrawn static =>
+      OnlyNotCanceled canceled;
+      match static with
+      | StaticAuction auction_owner bid_increment start_block end_block token_id =>
+
+        (* check if highest bidder is auction_owner *)
+        (* if so, this implies no one has bid; can proceed with cancelling *)
+        (* otherwise if there is at least one bid, auction_owner is not allowed to cancel auction *)
+        allow_to_cancel = builtin eq highest_bidder auction_owner;
+
+        match allow_to_cancel with
+        | True =>
+          (* highest bidder == auction_owner; no one has yet to place a bid on this listing *)
+          (* go ahead with cancel process *)
+          new_canceled = True;
+          new_auction = Auction new_canceled highest_binding_bid highest_bidder owner_has_withdrawn static;
+          auctions[id] := new_auction;
+      
+          TransferNFT auction_owner token_id;
+          delete bid_count[id];
+          delete token_auctions[token_id];
+          DeleteAuction id;
+          e = {
+            _eventname: "CancelAuctionAdmin";
+            auction_id: id;
+            token_id: token_id
+          };
+          event e
+        | False =>
+          (* highest bidder is not owner; someone has place a bid on this listing *)
+          (* not allow to cancel *)
+          err = CodeAuctionHasBid;
+          ThrowError err
+        end
+      end
+    end
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
 end
 
 
