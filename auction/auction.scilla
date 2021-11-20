@@ -218,7 +218,7 @@ end = init_marketplace
 field funds_by_bidder: Map ByStr20 (Map Uint256 Uint128) 
   = Emp ByStr20 (Map Uint256 Uint128)
 
-field pause: Uint32 = not_pause
+field pause: Uint32 = on_pause
 
 field auctions: Map Uint256 Auction = Emp Uint256 Auction
 field bid_count: Map Uint256 Uint64 = Emp Uint256 Uint64
