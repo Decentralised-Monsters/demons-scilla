@@ -11,10 +11,10 @@ Contracts:
   * [Auction](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/auction)
   * [Voting](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/vote)
   * [Liquidity](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/distributor)
-  * [Staking] (https://github.com/Decentralised-Monsters/demons-scilla/tree/master/staking)
-  * [Airdrop] (https://github.com/Decentralised-Monsters/demons-scilla/tree/master/airdrop)
-  * [Lockup] (https://github.com/Decentralised-Monsters/demons-scilla/tree/master/lockup)
-  * [Whitelist Proxy] (https://github.com/Decentralised-Monsters/demons-scilla/tree/master/whitelist-proxy)
+  * [Staking](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/staking)
+  * [Airdrop](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/airdrop)
+  * [Lockup](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/lockup)
+  * [Whitelist Proxy](https://github.com/Decentralised-Monsters/demons-scilla/tree/master/whitelist-proxy)
 
 ## Order of Deployment
 **1. Deploy ZRC2 dmz contract.**
