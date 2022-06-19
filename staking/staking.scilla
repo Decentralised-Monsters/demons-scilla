@@ -1,0 +1,1670 @@
+scilla_version 0
+
+(***************************************************)
+(*               Associated library                *)
+(***************************************************)
+import IntUtils BoolUtils
+library Staking
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+  Cons {Message} msg nil_msg
+
+let two_msgs =
+fun (msg1 : Message) =>
+fun (msg2 : Message) =>
+  let msgs_tmp = one_msg msg2 in
+  Cons {Message} msg1 msgs_tmp
+
+let blk_leq =
+  fun (blk1 : BNum) =>
+  fun (blk2 : BNum) =>
+    let bc1 = builtin blt blk1 blk2 in 
+    let bc2 = builtin eq blk1 blk2 in 
+    orb bc1 bc2
+    
+let uint128_leq =
+  fun (blk1 : Uint128) =>
+  fun (blk2 : Uint128) =>
+    let bc1 = builtin lt blk1 blk2 in 
+    let bc2 = builtin eq blk1 blk2 in 
+    orb bc1 bc2
+    
+(*fixed numbers for formulas*)
+let hundred = Uint128 100
+let week = Uint128 7
+let year = Uint128 365
+let zero = Uint128 0
+let intZero = Int32 0
+let two = Uint128 2
+let false = False
+let true = True
+
+let blkZero = BNum 0
+let uintOne = Uint128 1
+let uintTen = Uint128 10
+let tierCount = Uint128 10
+
+let intZero = Int32 0
+let intOne = Int32 1
+
+let rThousand = Uint128 1000
+
+let get_val =
+  fun (some_val: Option Uint128) =>
+    match some_val with
+    | Some val => val
+    | None => zero
+    end
+    
+let get_tier =
+  fun (some_val: Option Uint128) =>
+    match some_val with
+    | Some val => val
+    | None => uintOne
+    end
+    
+let get_Intval =
+  fun (some_val: Option Int32) =>
+    match some_val with
+    | Some val => val
+    | None => intZero
+    end
+
+
+let get_blkval =
+  fun (some_val: Option BNum) =>
+    match some_val with
+    | Some val => val
+    | None => blkZero
+    end
+
+(*Status back*)
+let dmzAddressUpdated = Int32 1
+let rateChanged = Int32 2
+let culModeChanged = Int32 3
+let cycleChanged = Int32 4
+let unstakeRateChanged = Int32 5
+let penaltyChanged = Int32 6
+let rewardBlocksChange = Int32 7
+let intializeContract = Int32 8
+let pausedChange = Int32 9
+let blocksNotReached = Int32 10
+let rewardsAwarded = Int32 11
+let blockChanged = Int32 12
+
+(* Error events *)
+type Error =
+| CodeIsNotSender
+| CodeInsufficientDmz
+| CodeExceedAvailable
+| CodeNotStaker
+| CodeBlockNotReach
+| CodeNoPending
+| CodeWrongToken
+| CodeContractPaused
+| CodeNotWhitelisted
+| CodeLessThanMinimumStake
+| CodeRewardBlocksNotMet
+| CodeWrongAmountStaked
+| CodeNotImplementation
+| CodeNotEpochZero
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeIsNotSender              => Int32 -1
+      | CodeInsufficientDmz     => Int32 -2
+      | CodeExceedAvailable => Int32 -3
+      | CodeNotStaker => Int32 -4
+      | CodeBlockNotReach => Int32 -5
+      | CodeNoPending => Int32 -6
+      | CodeWrongToken => Int32 -7
+      | CodeContractPaused => Int32 -8
+      | CodeNotWhitelisted => Int32 -9
+      | CodeLessThanMinimumStake => Int32 -10
+      | CodeRewardBlocksNotMet => Int32 -11
+      | CodeWrongAmountStaked => Int32 -12
+      | CodeNotImplementation => Int32 -13
+      | CodeNotEpochZero      => Int32 -14
+      end
+    in
+    { _exception : "Error"; code : result_code }
+  
+contract DmzStake
+(
+  initial_owner : ByStr20,
+  dmzContract : ByStr20
+)
+(*Used for ownership change*)
+field current_owner : ByStr20 = initial_owner
+field pending_owner : Option ByStr20 = None {ByStr20}
+field dmz_addr : ByStr20 = dmzContract
+field dmzAvailable : Uint128 = Uint128 0
+field dmzLastAmount : Uint128 = Uint128 0
+
+(*Add stakers*)
+field pendingAddStake : Map ByStr20 (Pair (ByStr20) (Uint128)) = Emp ByStr20 (Pair (ByStr20) (Uint128))
+field stakers : Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field removeStaker: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field removeBlock : Map ByStr20 BNum = Emp ByStr20 BNum
+field totalStaked : Uint128 = Uint128 0
+field totalStakers : Uint128 = Uint128 0
+field minimumStake : Uint128 = Uint128 5000000000
+
+(*Cycle related*)
+field cycleCount : Map ByStr20 Int32 = Emp ByStr20 Int32
+field cycleAmount : Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field tierCycle : Map ByStr20 Uint128 = Emp ByStr20 Uint128
+
+field rewardCount : Int32 = Int32 10
+field rewardRate : Uint128 = Uint128 1
+
+field futureContract : ByStr20 = _this_address
+field implementationContract : ByStr20 = _this_address
+
+field automaticCul : Map ByStr20 Bool = Emp ByStr20 Bool
+field pending_dmz : Map ByStr20 Uint128 = Emp ByStr20 Uint128
+
+field whitelistAddr : Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
+field useWhitelist : Bool = True
+
+(*Unstake related*)
+field unstakePercent : Uint128 = Uint128 7
+field rewardPercent : Uint128 = Uint128 15
+field remove_bnum : Uint64 = Uint64 16000
+field penalty : Uint128 = Uint128 10
+field burntAmount : Uint128 = Uint128 0
+field daily : Bool = True
+field unstakeDays : Uint128 = Uint128 10
+field penaltyRewardPerStaker : Uint128 = Uint128 0
+field totalUnstaked : Uint128 = Uint128 0
+field autoFee : Uint128 = Uint128 0
+field burnAddress : ByStr20 = initial_owner
+
+(*Contract Related*)
+field pauseStake : Bool = True
+field rewardBlocks : BNum = BNum 0
+field lastReward : BNum = BNum 0
+field rewardTime : Uint128 = Uint128 1700
+
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure isWhitelisted(addr: ByStr20)
+  isWhitelisted <- exists whitelistAddr[addr];
+  match isWhitelisted with
+    | False =>
+      err = CodeNotWhitelisted;
+      ThrowError err
+    | True =>
+  end
+end
+
+procedure isImplementation(addr: ByStr20)
+  imp <- implementationContract;
+  isImple = builtin eq addr imp;
+  match isImple with
+    | False =>
+      err = CodeNotImplementation;
+      ThrowError err
+    | True =>
+  end
+end
+
+procedure minimumStake (amount: Uint128)
+  min <- minimumStake;
+  isMin = builtin lt amount min;
+  match isMin with
+    | True =>
+      err = CodeLessThanMinimumStake;
+      ThrowError err
+    | False =>
+  end
+end
+
+procedure addRewards(staker: Pair ByStr20 Uint128)
+  match staker with
+    | Pair key value  =>
+      staking <- stakers[key];
+      daily <- daily;
+      totalStake <- totalStaked;
+      pending <- pending_dmz[key];
+      culmulative <- automaticCul[key];
+      current_supply <- dmzAvailable;
+      balance = get_val staking;
+      cycle <- cycleCount[key];
+      match cycle with
+        | Some cycle =>
+          newCycle = builtin add cycle intOne;
+          cycleCount[key] := newCycle
+        | None =>
+      end;
+      onePercent = builtin div balance hundred;
+      rewardRate <- rewardPercent;
+      yearRate = builtin mul onePercent rewardRate;
+      dailyReward = builtin div yearRate year;
+      match daily with
+        | True =>
+          (*Getting rid of the option datatype*)
+          match culmulative with
+            | Some culmulative =>
+              (*Check if culmulative is on*)
+              match culmulative with
+                | True =>
+                  newAmount = builtin add balance dailyReward;
+                  stakers[key] := newAmount
+                | False =>
+                  (*Reduce total staked*)
+                  reducedAmount = builtin sub totalStake dailyReward;
+                  totalStaked := reducedAmount;
+                  match pending with
+                    | Some pending =>
+                      newAmount = builtin add pending dailyReward;
+                      pending_dmz[key] := newAmount
+                    | None =>
+                      pending_dmz[key] := dailyReward
+                  end
+              end
+            | None =>
+          end
+        | False =>
+          weeklyReward = builtin mul dailyReward week;
+          match culmulative with
+            | Some culmulative =>
+              match culmulative with
+                | True =>
+                  newAmount = builtin add balance weeklyReward;
+                  stakers[key] := newAmount
+                | False =>
+                  (*Reduce total stake*)
+                  reducedAmount = builtin sub totalStake weeklyReward;
+                  totalStaked := reducedAmount;
+                  match pending with
+                    | Some pending =>
+                      newAmount = builtin add pending weeklyReward;
+                      pending_dmz[key] := newAmount
+                    | None =>
+                      pending_dmz[key] := weeklyReward
+                  end
+              end
+            | None =>
+          end
+      end
+  end
+end
+
+procedure rewardCycle(staker: Pair ByStr20 Uint128)
+  match staker with
+    | Pair key value  =>
+      baseAmount <- cycleAmount[key];
+      currentCount <- cycleCount[key];
+      opt_tier <- tierCycle[key];
+      tier = get_tier opt_tier;
+      rewardCounter <- rewardCount;
+      ownerDmz <- dmzAvailable;
+      pending <- pending_dmz[key];
+      stake <- stakers[key];
+      rate <- rewardRate;
+      match currentCount with
+        | Some currentCount =>
+          isEqual = builtin eq currentCount rewardCounter;
+          isMore = builtin lt rewardCounter currentCount;
+          check3 = orb isEqual isMore;
+          match check3 with
+            | True =>
+              match baseAmount with
+                | Some baseAmount =>
+                  isLessThanTen = builtin lt tier tierCount;
+                  match isLessThanTen with
+                    | True =>
+                      
+                      onePercent = builtin div baseAmount hundred;
+                      baseTierReward = builtin div onePercent tierCount;
+                      tierReward = builtin mul baseTierReward tier;
+                      (*Reduce owner dmz rate*)
+                      reduceOwner =  builtin sub ownerDmz tierReward;
+                      dmzAvailable := reduceOwner;
+                      match pending with
+                        | Some pending =>
+                          newAmount = builtin add pending tierReward;
+                          pending_dmz[key] := newAmount;
+                          cycleCount[key] := intZero;
+                          match stake with
+                            | Some stake => 
+                              cycleAmount[key] := stake
+                            | None =>
+                          end
+                        | None =>
+                          pending_dmz[key] := tierReward;
+                          cycleCount[key] := intZero;
+                          match stake with
+                            | Some stake => 
+                              cycleAmount[key] := stake
+                            | None =>
+                          end
+                      end;
+                      newTier = builtin add tier uintOne;
+                      tierCycle[key] := newTier
+                      
+                    | False =>
+                      
+                      onePercent = builtin div baseAmount hundred;
+                      (*Reduce owner dmz rate*)
+                      reduceOwner =  builtin sub ownerDmz onePercent;
+                      dmzAvailable := reduceOwner;
+                      match pending with
+                        | Some pending =>
+                          newAmount = builtin add pending onePercent;
+                          pending_dmz[key] := newAmount;
+                          cycleCount[key] := intZero;
+                          match stake with
+                            | Some stake => 
+                              cycleAmount[key] := stake
+                            | None =>
+                          end
+                        | None =>
+                          pending_dmz[key] := onePercent;
+                          cycleCount[key] := intZero;
+                          match stake with
+                            | Some stake => 
+                              cycleAmount[key] := stake
+                            | None =>
+                          end
+                      end
+                      
+                      
+                  end
+                  
+                  
+                | None =>
+              end
+            | False =>
+          end
+        | None =>
+      end
+  end
+end
+
+procedure addUnstakeReward(staker: Pair ByStr20 Uint128)
+  match staker with
+    | Pair key value  =>
+      staking <- removeStaker[key];
+      daily <- daily;
+      pending <- pending_dmz[key];
+      ownerDmz <- dmzAvailable;
+      balance = get_val staking;
+      onePercent = builtin div balance hundred;
+      rewardRate <- unstakePercent;
+      yearRate = builtin mul onePercent rewardRate;
+      dailyReward = builtin div yearRate year;
+      match daily with
+        | True =>
+          (*Reduce owner dmz rate*)
+          reduceOwner =  builtin sub ownerDmz dailyReward;
+          dmzAvailable := reduceOwner;
+          match pending with
+            | Some pending =>
+              newAmount = builtin add pending dailyReward;
+              pending_dmz[key] := newAmount
+            | None =>
+              pending_dmz[key] := dailyReward
+          end
+        | False =>
+          weeklyReward = builtin mul dailyReward week;
+          (*Reduce owner dmz rate*)
+          reduceOwner =  builtin sub ownerDmz weeklyReward;
+          dmzAvailable := reduceOwner;
+          match pending with
+            | Some pending =>
+              newAmount = builtin add pending weeklyReward;
+              pending_dmz[key] := newAmount
+            | None =>
+              pending_dmz[key] := weeklyReward
+          end
+      end
+  end
+end
+
+procedure penaltyToStakers(staker: Pair ByStr20 Uint128)
+  match staker with
+    | Pair key value  =>
+      pending <- pending_dmz[key];
+      reward <- penaltyRewardPerStaker;
+      match pending with
+        | Some pending =>
+          newAmount = builtin add pending reward;
+          pending_dmz[key] := newAmount
+        | None =>
+          pending_dmz[key] := reward
+      end
+  end
+end
+
+transition initializeContract()
+  owner <- current_owner;
+  currentValue <- rewardBlocks;
+  lastRewarded <- lastReward;
+  rewardTimeBlock <- rewardTime;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      currentBlock <- & BLOCKNUMBER;
+      newRewardBlock = builtin badd currentBlock rewardTimeBlock;
+      rewardBlocks := newRewardBlock;
+      lastReward := currentBlock;
+      msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+          code : intializeContract};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition addWhitelistAddress(address: ByStr20)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+    | True =>
+      whitelistAddr[address] := address
+  end
+end
+
+transition removeWhitelistAddress(address: ByStr20)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+    | True =>
+      delete whitelistAddr[address]
+  end
+end
+
+transition changeRewardBlocks(block: Uint128)
+  owner <- current_owner;
+  currentValue <- rewardTime;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      rewardTime := block;
+      msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+          code : rewardBlocksChange};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+transition pauseContract()
+  owner <- current_owner;
+  currentValue <- pauseStake;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      match currentValue with
+        | True =>
+        | False=>
+          pauseStake := true;
+          msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : pausedChange};
+          msgs = one_msg msg;
+          send msgs;
+          event_paused_contract = { _eventname: "contractPaused"; paused: true};
+          event event_paused_contract
+      end
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition unpauseContract()
+  owner <- current_owner;
+  currentValue <- pauseStake;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      match currentValue with
+        | True =>
+          pauseStake := false;
+          msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : pausedChange};
+          msgs = one_msg msg;
+          send msgs;
+          event_paused_contract = { _eventname: "contractPaused"; paused: false};
+          event event_paused_contract
+        | False=>
+      end
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition rewardAll()
+  currentBlk <- & BLOCKNUMBER;
+  rewardBlock <- rewardBlocks;
+  isBlockHigher = blk_leq currentBlk rewardBlock;
+  match isBlockHigher with
+    | True =>
+      (*Not enough blocks yet*)
+      err = CodeRewardBlocksNotMet;
+      ThrowError err
+    | False =>
+      currentStake <- totalStaked;
+      currentUnstake <- totalUnstaked;
+      dmzAdded <- dmzAvailable;
+      dmzLastAmount := dmzAdded;
+      stakeRate <- rewardPercent;
+      unstakeRate <- unstakePercent;
+      currentIteration <- daily;
+      
+      onePercentStake = builtin div currentStake hundred;
+      onePercentUnstake = builtin div currentUnstake hundred;
+      stakeRatePerYear = builtin mul onePercentStake stakeRate;
+      unstakeRatePerYear = builtin mul onePercentUnstake unstakeRate;
+      stakeDailyRate = builtin div stakeRatePerYear year;
+      unstakeDailyRate = builtin div unstakeRatePerYear year;
+      stakesCost = builtin add unstakeDailyRate stakeDailyRate;
+      
+      match currentIteration with
+        | True =>
+          (*If daily Rate*)
+          isDmzEnough = builtin lt dmzAdded stakesCost;
+          match isDmzEnough with
+            | True =>
+              err = CodeInsufficientDmz;
+              ThrowError err
+            | False =>
+              (*Staking rewards*)
+              stake <- stakers;
+              staker_list = builtin to_list stake;
+              newStake = builtin add currentStake stakeDailyRate;
+              reduceOwner = builtin sub dmzAdded stakeDailyRate;
+              dmzAvailable := reduceOwner;
+              totalStaked := newStake;
+              forall staker_list addRewards;
+              
+              (*Unstaking Rewards*)
+              unstake <- removeStaker;
+              unstaker_list = builtin to_list unstake;
+              forall unstaker_list addUnstakeReward;
+              
+              currentBlockCycle <- rewardBlocks;
+              rewardTimeBlock <- rewardTime;
+              newRewardBlock = builtin badd currentBlockCycle rewardTimeBlock;
+              rewardBlocks := newRewardBlock;
+              lastReward := currentBlockCycle;
+              
+              initialCarb <- dmzLastAmount;
+              balanceCarb <- dmzAvailable;
+              totalrewarded = builtin sub initialCarb balanceCarb;
+              event_rewardsGiven = { _eventname: "rewardsAwarded"; block: currentBlk; rewardGiven: totalrewarded};
+              event event_rewardsGiven
+          end
+        | False =>
+          (*If weekly rate*)
+          stakeWeeklyRate = builtin mul stakeDailyRate week;
+          unstakeWeeklyRate = builtin mul unstakeDailyRate week;
+          stakeTotalRequired = builtin add stakeWeeklyRate unstakeWeeklyRate;
+          
+          isDmzEnough = builtin lt dmzAdded stakeTotalRequired;
+          
+          match isDmzEnough with
+            | True =>
+              err = CodeInsufficientDmz;
+              ThrowError err
+            | False =>
+              (*Stakers*)
+              stake <- stakers;
+              staker_list = builtin to_list stake;
+              newStake = builtin add currentStake stakeWeeklyRate;
+              reduceOwner = builtin sub dmzAdded stakeWeeklyRate;
+              dmzAvailable := reduceOwner;
+              totalStaked := newStake;
+              forall staker_list addRewards;
+              
+              
+              (*Unstake*)
+              unstake <- removeStaker;
+              staker_list = builtin to_list unstake;
+              forall staker_list addUnstakeReward;
+              
+              currentBlockCycle <- rewardBlocks;
+              rewardTimeBlock <- rewardTime;
+              newRewardBlock = builtin badd currentBlockCycle rewardTimeBlock;
+              rewardBlocks := newRewardBlock;
+              lastReward := currentBlockCycle;
+              
+              initialCarb <- dmzLastAmount;
+              balanceCarb <- dmzAvailable;
+              totalrewarded = builtin sub initialCarb balanceCarb;
+              event_rewardsGiven = { _eventname: "rewardsAwarded"; block: currentBlk; rewardGiven: totalrewarded};
+              event event_rewardsGiven
+              
+          end
+      end
+  end
+end
+
+transition rewardCycleRewards()
+  currentBlk <- & BLOCKNUMBER;
+  currentStake <- totalStaked;
+  dmzAdded <- dmzAvailable;
+  dmzLastAmount := dmzAdded;
+
+  (*Cycle rewards*)
+  cycle <- cycleAmount;
+  cycleAmount_list = builtin to_list cycle;
+  (*Have to ensure there is enough dmz in contract*)
+  forall cycleAmount_list rewardCycle;
+  
+  initialCarb <- dmzLastAmount;
+  balanceCarb <- dmzAvailable;
+  totalrewarded = builtin sub initialCarb balanceCarb;
+  event_cycleRewardsGiven = { _eventname: "cycleRewardsAwarded"; block: currentBlk; rewardGiven: totalrewarded};
+  event event_cycleRewardsGiven
+end
+
+
+transition addStakeForOthers(address: ByStr20, amount: Uint128)
+  newPair = Pair {(ByStr20) (Uint128)} address amount;
+  pendingAddStake[_sender] := newPair;
+  msg  = {_tag : "pendingStake"; _recipient : _sender; _amount : Uint128 0; address: address; amount: amount};
+  msgs = one_msg msg;
+  send msgs
+end
+
+transition removePendingAddStakeForOthers()
+  delete pendingAddStake[_sender]
+end
+
+
+(*Add a transition for sender to change their culmulative boolean*)
+transition changeCulmulative()
+  cul <- automaticCul[_sender];
+  match cul with
+    | Some cul =>
+      match cul with
+        | True =>
+          automaticCul[_sender] := false;
+          msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : culModeChanged};
+          msgs = one_msg msg;
+          send msgs
+        | False =>
+          automaticCul[_sender] := true;
+          msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : culModeChanged};
+          msgs = one_msg msg;
+          send msgs
+      end
+    | None =>
+      (*Not a staker*)
+      err = CodeNotStaker;
+      ThrowError err
+  end
+end
+
+
+
+(*Add a remove pending*)
+transition withdrawPending()
+  pending <- pending_dmz[_sender];
+  dmzAddr <- dmz_addr;
+  match pending with
+    | Some pending =>
+      delete pending_dmz[_sender];
+      msg = {_tag : "Transfer"; _recipient: dmzAddr; _amount: zero;
+              to: _sender; amount: pending};
+      msgs = one_msg msg;
+      send msgs
+    | None =>
+    (*No pending Dmz*)
+    err = CodeNoPending;
+    ThrowError err
+  end
+end
+
+
+transition removeStakeIfEpochZero()
+  opt_accBalance <- stakers[_sender];
+  accBalance = get_val opt_accBalance;
+  total_staked <- totalStaked;
+  currentEpochCount <- cycleCount[_sender];
+  epochValue = get_Intval currentEpochCount;
+  isZero = builtin eq epochValue intZero;
+  match isZero with
+    | True =>
+      dmzAddr <- dmz_addr;
+      msg = {_tag : "Transfer"; _recipient: dmzAddr; _amount: Uint128 0;
+              to: _sender; amount: accBalance};
+      msgs = one_msg msg;
+      send msgs;
+      
+      delete stakers[_sender];
+      delete cycleAmount[_sender];
+      delete cycleCount[_sender];
+      delete tierCycle[_sender];
+      
+      newStaked = builtin sub total_staked accBalance;
+      totalStaked := newStaked;
+      
+      current_stake <- totalStakers;
+      new_stakers = builtin sub current_stake uintOne;
+      totalStakers := new_stakers
+      
+    | False =>
+      err = CodeNotEpochZero;
+      ThrowError err
+  end
+end
+
+transition removeStake(amount: Uint128)
+  accBalance <- stakers[_sender];
+  total_staked <- totalStaked;
+  total_unstaked <- totalUnstaked;
+  match accBalance with
+    | Some accBalance =>
+      fullWithdrawal = uint128_ge amount accBalance;
+      
+      match fullWithdrawal with
+        | False =>
+          minStake <- minimumStake;
+          newBalance = builtin sub accBalance amount;
+          isMinimum = builtin lt newBalance minStake;
+          match isMinimum with
+            | True =>
+              err = CodeLessThanMinimumStake;
+              ThrowError err
+            | False =>
+          end;
+
+          checkPending <- removeStaker[_sender];
+          newStaked = builtin sub total_staked amount;
+          totalStaked := newStaked;
+          newUnstaked = builtin add total_unstaked amount;
+          totalUnstaked := newUnstaked;
+          match checkPending with
+            | Some checkPending =>
+              (*If theres is any unstaking amount add into the pending and reset the block time*)
+              newAmount = builtin add checkPending amount;
+              removeStaker[_sender] := newAmount;
+              remove_block <- remove_bnum;
+              current_block <- & BLOCKNUMBER;
+              block_required = builtin badd current_block remove_block;
+              removeBlock[_sender] := block_required;
+              
+              stakers[_sender] := newBalance;
+              cycleAmount[_sender] := newBalance;
+              cycleCount[_sender] := intOne;
+              tierCycle[_sender] := uintOne
+            | None =>
+              removeStaker[_sender] := amount;
+              remove_block <- remove_bnum;
+              current_block <- & BLOCKNUMBER;
+              block_required = builtin badd current_block remove_block;
+              removeBlock[_sender] := block_required;
+              stakers[_sender] := newBalance;
+              cycleAmount[_sender] := newBalance;
+              tierCycle[_sender] := uintOne;
+              cycleCount[_sender] := intOne
+              
+          end
+        | True =>
+          checkPending <- removeStaker[_sender];
+          newStaked = builtin sub total_staked accBalance;
+          totalStaked := newStaked;
+          newUnstaked = builtin add total_unstaked accBalance;
+          totalUnstaked := newUnstaked;
+          match checkPending with
+            | Some checkPending =>
+              newAmount = builtin add checkPending accBalance;
+              removeStaker[_sender] := newAmount;
+              remove_block <- remove_bnum;
+              current_block <- & BLOCKNUMBER;
+              block_required = builtin badd current_block remove_block;
+              removeBlock[_sender] := block_required;
+              delete stakers[_sender];
+              delete cycleAmount[_sender];
+              delete cycleCount[_sender];
+              delete tierCycle[_sender];
+              current_stake <- totalStakers;
+              new_stakers = builtin sub current_stake uintOne;
+              totalStakers := new_stakers
+            | None =>
+              removeStaker[_sender] := accBalance;
+              remove_block <- remove_bnum;
+              current_block <- & BLOCKNUMBER;
+              block_required = builtin badd current_block remove_block;
+              removeBlock[_sender] := block_required;
+              delete stakers[_sender];
+              delete cycleAmount[_sender];
+              delete cycleCount[_sender];
+              delete tierCycle[_sender];
+              
+              current_stake <- totalStakers;
+              new_stakers = builtin sub current_stake uintOne;
+              totalStakers := new_stakers
+          end
+      end
+    | None =>
+      err = CodeNotStaker;
+      ThrowError err
+  end
+end
+
+transition withdrawStake()
+  current_block <- & BLOCKNUMBER;
+  blocks_required <- removeBlock[_sender];
+  dmzAddr <- dmz_addr;
+  total_unstake <- totalUnstaked;
+  match blocks_required with
+    | None =>
+    | Some blocks_required =>
+      is_more = blk_leq blocks_required current_block;
+      match is_more with
+        | True =>
+          (*pass withdrawal*)
+          amount <- removeStaker[_sender];
+          match amount with
+            | None =>
+            | Some amount =>
+              newUnstaked = builtin sub total_unstake amount;
+              totalUnstaked := newUnstaked;
+              msg = {_tag : "Transfer"; _recipient: dmzAddr; _amount: Uint128 0;
+                      to: _sender; amount: amount};
+              msgs = one_msg msg;
+              send msgs;
+              delete removeBlock[_sender];
+              delete removeStaker[_sender]
+          end
+        | False =>
+          (*Reject as block time is not reach*)
+          err = CodeBlockNotReach;
+          ThrowError err
+      end
+  end
+end
+
+(*Fee is sent to the caller*)
+transition automaticWithdrawStake(recipient: ByStr20)
+  current_block <- & BLOCKNUMBER;
+  blocks_required <- removeBlock[recipient];
+  dmzAddr <- dmz_addr;
+  fee <- autoFee;
+  total_unstake <- totalUnstaked;
+  match blocks_required with
+    | None =>
+    | Some blocks_required =>
+      is_more = blk_leq blocks_required current_block;
+      match is_more with
+        | True =>
+          (*pass withdrawal*)
+          amount <- removeStaker[recipient];
+          match amount with
+            | None =>
+            | Some amount =>
+              newUnstaked = builtin sub total_unstake amount;
+              totalUnstaked := newUnstaked;
+              recipientAmount = builtin sub amount fee;
+              msg_recipient = {_tag : "Transfer"; _recipient: dmzAddr; _amount: Uint128 0;
+                      to: recipient; amount: recipientAmount};
+              msg_sender = {_tag : "Transfer"; _recipient: dmzAddr; _amount: Uint128 0;
+                      to: _sender; amount: fee};
+              msgs = two_msgs msg_recipient msg_sender;
+              send msgs;
+              delete removeBlock[recipient];
+              delete removeStaker[recipient]
+          end
+        | False =>
+          (*Reject as block time is not reach*)
+          err = CodeBlockNotReach;
+          ThrowError err
+      end
+  end
+end
+
+(*burnAddress*)
+
+transition instantWithdrawal()
+  dmzAddr <- dmz_addr;
+  rate <- rewardPercent;
+  total_unstake <- totalUnstaked;
+  penaltyRate <- penalty;
+  days <- unstakeDays;
+  number_of_stakers <- totalStakers;
+  pool <- dmzAvailable;
+  amount <- removeStaker[_sender];
+  burn <- burntAmount;
+  deadAddress <- burnAddress;
+  match amount with
+    | None =>
+    | Some amount =>
+      
+      currentBlk <- & BLOCKNUMBER;
+      remove_block <- remove_bnum;
+      opt_blockToRemove <- removeBlock[_sender];
+      blockToRemove = get_blkval opt_blockToRemove;
+      balanceBlocks = builtin bsub blockToRemove currentBlk;
+      
+      (*Change all to Uint128*)
+      (*If no balance left it would be 0 thus penalty 0*)
+      opt_uint128BalanceBlocks = builtin to_uint128 balanceBlocks;
+      uint128BalanceBlocks = get_val opt_uint128BalanceBlocks;
+      (*How many blocks is the unbonding period e.g. 25000 blocks*)
+      opt_uint128RBlock = builtin to_uint128 remove_block;
+      uint128RBlock = get_val opt_uint128RBlock;
+      
+      
+      onePercent = builtin div amount hundred;
+      penaltyFee = builtin mul onePercent penaltyRate;
+      apyRate = builtin mul onePercent rate;
+      dailyRate = builtin div apyRate year;
+      unbondFee = builtin mul dailyRate days;
+      totalPenalty = builtin add penaltyFee unbondFee;
+      
+      scale = builtin mul totalPenalty rThousand;
+      divScale = builtin div scale uint128RBlock;
+      rescale = builtin mul divScale uint128BalanceBlocks;
+      scaledPenalty = builtin div rescale rThousand;
+      
+      
+      
+      (*Change away total penalty to scaledPenalty*)
+      onePercentBurn = builtin div scaledPenalty hundred;
+      burnAmount = builtin mul onePercentBurn burn;
+      
+      returnedAmount = builtin sub amount scaledPenalty;
+      returnStaker = builtin sub scaledPenalty burnAmount;
+      
+      perStaker = builtin div returnStaker number_of_stakers;
+      penaltyRewardPerStaker := perStaker;
+      stake <- stakers;
+      staker_list = builtin to_list stake;
+      forall staker_list penaltyToStakers;
+      newUnstaked = builtin sub total_unstake amount;
+      totalUnstaked := newUnstaked;
+      msg1 = {_tag : "Transfer"; _recipient: dmzAddr; _amount: Uint128 0;
+              to: _sender; amount: returnedAmount};
+      msg2 = {_tag : "Transfer"; _recipient: dmzAddr; _amount: Uint128 0;
+              to: deadAddress; amount: burnAmount};
+      msgs = two_msgs msg1 msg2;
+      send msgs;
+      delete removeBlock[_sender];
+      delete removeStaker[_sender]
+  end
+end
+
+
+
+
+
+transition transferStakeToNewContract(address: ByStr20)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      futureAddr <- futureContract;
+      stakers_amount <- stakers[address];
+      cyc_amount <- cycleAmount[address];
+      cyc_Count <- cycleCount[address];
+      stake_amount = get_val stakers_amount;
+      cycle_Amount = get_val cyc_amount;
+      cycle_Count = get_Intval cyc_Count;
+      msg = {_tag : "TransferStakeToNew"; _recipient: futureAddr; _amount: Uint128 0;
+              staker_address: address;staked_amount: stake_amount; cycleAmount : cycle_Amount; cycleCount: cycle_Count};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition transferUnstakeToNewContract(address: ByStr20)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      futureAddr <- futureContract;
+      
+      unstakeAmount <- removeStaker[address];
+      unstakeBlock <- removeBlock[address];
+      unstaked_amount = get_val unstakeAmount;
+      unstaked_block =  get_blkval unstakeBlock;
+      
+      msg = {_tag : "TransferUnstakeToNew"; _recipient: futureAddr; _amount: Uint128 0;
+              staker_address: address;unstaked_amount: unstaked_amount; unstaked_blocks: unstaked_block};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+
+
+
+
+
+transition transferStakeSuccessfulCallBack(address: ByStr20)
+  futureAddr <- futureContract;
+  dmzAddr <- dmz_addr;
+  isFuture = builtin eq futureAddr _sender;
+  match isFuture with
+    | True =>
+      amount_toReturn <- stakers[address];
+      send_amount = get_val amount_toReturn;
+      total_staked <- totalStaked;
+      newStaked = builtin sub total_staked send_amount;
+      totalStaked := newStaked;
+      total_stakers <- totalStakers;
+      newStakerAmount = builtin sub total_stakers uintOne;
+      totalStakers := newStakerAmount;
+      delete stakers[address];
+      delete cycleAmount[address];
+      delete cycleCount[address];
+      msg = {_tag : "Transfer"; _recipient: dmzAddr; _amount: Uint128 0;
+              to: futureAddr; amount: send_amount};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition transferUnstakeSuccessfulCallBack(address: ByStr20)
+  futureAddr <- futureContract;
+  dmzAddr <- dmz_addr;
+  isFuture = builtin eq futureAddr _sender;
+  match isFuture with
+    | True =>
+      amount_toReturn <- removeStaker[address];
+      send_amount = get_val amount_toReturn;
+      total_unstaked <- totalUnstaked;
+      newUnstaked = builtin sub total_unstaked send_amount;
+      totalUnstaked := newUnstaked;
+      delete removeStaker[address];
+      delete removeBlock[address];
+      msg = {_tag : "Transfer"; _recipient: dmzAddr; _amount: Uint128 0;
+              to: futureAddr; amount: send_amount};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+
+transition changeImplementationContractAddress(address: ByStr20)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      implementationContract := address
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+
+transition changeFutureContractAddress(address: ByStr20)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      futureContract := address
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition setBurnAddress(address: ByStr20)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      burnAddress := address
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+transition ownerWithdrawAdded (amount: Uint128)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      ownerDmz <- dmzAvailable;
+      dmzAddr <- dmz_addr;
+      amountNotOk = builtin lt ownerDmz amount;
+      match amountNotOk with
+        | True =>
+          (*Exceed available*)
+          err = CodeExceedAvailable;
+          ThrowError err
+        | False =>
+          msg = {_tag : "Transfer"; _recipient: dmzAddr; _amount: zero;
+                  to: owner; amount: amount};
+          msgs = one_msg msg;
+          send msgs;
+          newAmount = builtin sub ownerDmz amount;
+          dmzAvailable := newAmount
+      end
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+transition changeTierCycle (addr: ByStr20, cycle: Uint128)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      tierCycle[addr] := cycle
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+transition changeEpochCount (cycle: Int32)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      rewardCount := cycle;
+      msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : cycleChanged};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition changeUnstakeBlocks (blocks: Uint64)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      remove_bnum := blocks;
+      msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : blockChanged};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition changeUnstakeRate (rate: Uint128)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      unstakePercent := rate;
+      msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : unstakeRateChanged};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition changePenalty (rate: Uint128, days: Uint128)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      penalty := rate;
+      unstakeDays := days;
+      msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : penaltyChanged};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+
+transition setBurnPercent (rate: Uint128)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      burntAmount := rate
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition changeRewardPercent (rate: Uint128)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      rewardPercent := rate;
+      msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : rateChanged};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+
+transition setAutoFee(amount: Uint128)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+    | True =>
+      autoFee := amount
+  end
+end
+
+transition useWhitelist ()
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+    | True =>
+      wl <- useWhitelist;
+      match wl with
+        | True =>
+        | False =>
+          useWhitelist := true
+      end
+  end
+end
+
+
+
+
+transition removeWhitelist ()
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+    | True =>
+      wl <- useWhitelist;
+      match wl with
+        | True =>
+          useWhitelist := false
+        | False =>
+      end
+  end
+end
+
+transition toggleDailyToWeekly ()
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      isDaily <- daily;
+      match isDaily with
+        | True =>
+          daily := false;
+          msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : rateChanged};
+          msgs = one_msg msg;
+          send msgs
+        | False =>
+          daily := true;
+          msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+                  code : rateChanged};
+          msgs = one_msg msg;
+          send msgs
+      end
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition changeMinimumStake(amount: Uint128)
+  owner <- current_owner;
+  currentValue <- rewardTime;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      minimumStake := amount
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+(*When DMZ is sent to contract address*)
+transition RecipientAcceptTransfer(
+  sender : ByStr20,
+  recipient : ByStr20,
+  amount : Uint128
+)
+  owner <- current_owner;
+  dmzAddr <- dmz_addr;
+  isPaused <- pauseStake;
+  allowAll <- useWhitelist;
+  pendingAdd <- pendingAddStake[sender];
+  isOwner = builtin eq sender owner;
+  imp <- implementationContract;
+  isImp = builtin eq imp sender;
+  match isImp with
+    | True =>
+    | False =>
+      match isPaused with
+        | True =>
+          err = CodeContractPaused;
+          ThrowError err
+        | False =>
+          match isOwner with
+            | True =>
+              current_supply <- dmzAvailable;
+              newSupply = builtin add current_supply amount;
+              dmzAvailable := newSupply
+            | False =>
+              minimumStake amount;
+              match allowAll with
+                | False =>
+                  (*Check if sender is coming from DMZ Address only authentic token paid would be accepted*)
+                  isCarbContract = builtin eq dmzAddr _sender;
+                  match isCarbContract with
+                    | True =>
+                      match pendingAdd with
+                        | None =>
+                          stakedAmount <- stakers[sender];
+                          match stakedAmount with
+                            | Some stakedAmount =>
+                              newAmount = builtin add stakedAmount amount;
+                              stakers[sender] := newAmount;
+                              currentStake <- totalStaked;
+                              newAmount = builtin add currentStake amount;
+                              totalStaked := newAmount
+                            | None =>
+                              stakers[sender] := amount;
+                              automaticCul[sender] := true;
+                              cycleCount[sender] := intZero;
+                              cycleAmount[sender] := amount;
+                              tierCycle[sender] := uintOne;
+                              currentStake <- totalStaked;
+                              newAmount = builtin add currentStake amount;
+                              totalStaked := newAmount;
+                              current_staker <- totalStakers;
+                              newStaker = builtin add current_staker uintOne;
+                              totalStakers := newStaker
+                          end
+                        | Some pendingAdd =>
+                          match pendingAdd with
+                            | Pair addressOfStaker amountAdding =>
+                              isEqualPaid = builtin eq amountAdding amount;
+                              match isEqualPaid with
+                                | False =>
+                                  delete pendingAddStake[sender];
+                                  err = CodeWrongAmountStaked;
+                                  ThrowError err
+                                | True =>
+                                  delete pendingAddStake[sender];
+                                  stakedAmount <- stakers[addressOfStaker];
+                                  match stakedAmount with
+                                    | Some stakedAmount =>
+                                      newAmount = builtin add stakedAmount amount;
+                                      stakers[addressOfStaker] := newAmount;
+                                      currentStake <- totalStaked;
+                                      newAmount = builtin add currentStake amount;
+                                      totalStaked := newAmount
+                                    | None =>
+                                      stakers[addressOfStaker] := amount;
+                                      automaticCul[addressOfStaker] := true;
+                                      cycleCount[addressOfStaker] := intZero;
+                                      tierCycle[sender] := uintOne;
+                                      cycleAmount[addressOfStaker] := amount;
+                                      currentStake <- totalStaked;
+                                      newAmount = builtin add currentStake amount;
+                                      totalStaked := newAmount;
+                                      current_staker <- totalStakers;
+                                      newStaker = builtin add current_staker uintOne;
+                                      totalStakers := newStaker
+                                  end
+                              end
+                          end
+                      end
+                    | False=>
+                      err = CodeWrongToken;
+                      ThrowError err
+                  end
+                | True =>
+                  
+                  isWhitelisted sender;
+                  
+                  (*Check if sender is coming from DMZ Address only authentic token paid would be accepted*)
+                  isCarbContract = builtin eq dmzAddr _sender;
+                  match isCarbContract with
+                    | True =>
+                      match pendingAdd with
+                        | None =>
+                          stakedAmount <- stakers[sender];
+                          match stakedAmount with
+                            | Some stakedAmount =>
+                              newAmount = builtin add stakedAmount amount;
+                              stakers[sender] := newAmount;
+                              currentStake <- totalStaked;
+                              newAmount = builtin add currentStake amount;
+                              totalStaked := newAmount
+                            | None =>
+                              stakers[sender] := amount;
+                              automaticCul[sender] := true;
+                              cycleCount[sender] := intZero;
+                              cycleAmount[sender] := amount;
+                              tierCycle[sender] := uintOne;
+                              currentStake <- totalStaked;
+                              newAmount = builtin add currentStake amount;
+                              totalStaked := newAmount;
+                              current_staker <- totalStakers;
+                              newStaker = builtin add current_staker uintOne;
+                              totalStakers := newStaker
+                          end
+                        | Some pendingAdd =>
+                          match pendingAdd with
+                            | Pair addressOfStaker amountAdding =>
+                              isWhitelisted addressOfStaker;
+                              isEqualPaid = builtin eq amountAdding amount;
+                              match isEqualPaid with
+                                | False =>
+                                  delete pendingAddStake[sender];
+                                  err = CodeWrongAmountStaked;
+                                  ThrowError err
+                                | True =>
+                                  delete pendingAddStake[sender];
+                                  stakedAmount <- stakers[addressOfStaker];
+                                  match stakedAmount with
+                                    | Some stakedAmount =>
+                                      newAmount = builtin add stakedAmount amount;
+                                      stakers[addressOfStaker] := newAmount;
+                                      currentStake <- totalStaked;
+                                      newAmount = builtin add currentStake amount;
+                                      totalStaked := newAmount
+                                    | None =>
+                                      stakers[addressOfStaker] := amount;
+                                      automaticCul[addressOfStaker] := true;
+                                      cycleCount[addressOfStaker] := intZero;
+                                      tierCycle[sender] := uintOne;
+                                      cycleAmount[addressOfStaker] := amount;
+                                      currentStake <- totalStaked;
+                                      newAmount = builtin add currentStake amount;
+                                      totalStaked := newAmount;
+                                      current_staker <- totalStakers;
+                                      newStaker = builtin add current_staker uintOne;
+                                      totalStakers := newStaker
+                                  end
+                              end
+                          end
+                      end
+                    | False=>
+                      err = CodeWrongToken;
+                      ThrowError err
+                  end
+              end
+          end
+      end
+  end
+end
+
+transition TransferSuccessCallBack(
+  sender : ByStr20,
+  recipient : ByStr20,
+  amount : Uint128
+)
+end
+
+(*Change DMZ Contract Address*)
+transition updatedmzAddress(addr: ByStr20)
+  owner <- current_owner;
+  isOwner = builtin eq owner _sender;
+  match isOwner with
+    | True =>
+      dmz_addr := addr;
+      msg  = {_tag : ""; _recipient : _sender; _amount : Uint128 0;
+              code : dmzAddressUpdated};
+      msgs = one_msg msg;
+      send msgs
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+
+transition TransferStakeToNew (staker_address : ByStr20, staked_amount : Uint128, cycleAmount : Uint128, cycleCount : Int32)
+  (*Check if its implementation contract*)
+  isImplementation _sender;
+  pendingStake <- stakers[staker_address];
+  match pendingStake with
+    | Some pend =>
+      newAmount = builtin add pend staked_amount;
+      stakers[staker_address] := newAmount;
+      cycleAmount[staker_address] := cycleAmount;
+      cycleCount[staker_address] := cycleCount
+    | None =>
+      stakers[staker_address] := staked_amount;
+      cycleAmount[staker_address] := cycleAmount;
+      cycleCount[staker_address] := cycleCount;
+      stakers <- totalStakers;
+      newStaker = builtin add stakers uintOne;
+      totalStakers := newStaker
+  end;
+  staked <- totalStaked;
+  newStaked = builtin add staked staked_amount;
+  totalStaked := newStaked;
+  
+  msg = {_tag : "transferStakeSuccessfulCallBack"; _recipient: _sender; _amount: Uint128 0;
+          address : staker_address};
+  msgs = one_msg msg;
+  send msgs
+end
+
+
+transition TransferUnstakeToNew(staker_address : ByStr20, unstaked_amount : Uint128, unstaked_blocks : BNum)
+  isImplementation _sender;
+  pendUnstake <- removeStaker[staker_address];
+  match pendUnstake with
+    | Some pend =>
+      newUnstake = builtin add pend unstaked_amount;
+      removeStaker[staker_address] := newUnstake;
+      removeBlock[staker_address] := unstaked_blocks
+    | None =>
+      removeStaker[staker_address] := unstaked_amount;
+      removeBlock[staker_address] := unstaked_blocks
+  end;
+  
+  unstaked <- totalUnstaked;
+  newUnstaked = builtin add unstaked unstaked_amount;
+  totalUnstaked := newUnstaked;
+  
+  msg = {_tag : "transferUnstakeSuccessfulCallBack"; _recipient: _sender; _amount: Uint128 0;
+          address : staker_address};
+  msgs = one_msg msg;
+  send msgs
+end
+
+
+
+
+(*Change Owner of Contract*)
+transition RequestOwnershipTransfer(new_owner : ByStr20)
+  owner <- current_owner;
+  isOwner = builtin eq _sender owner;
+  match isOwner with
+    | True =>
+      po = Some {ByStr20} new_owner;
+      pending_owner := po
+    | False =>
+      err = CodeIsNotSender;
+      ThrowError err
+  end
+end
+
+transition ConfirmOwnershipTransfer()
+  optional_po <- pending_owner;
+  match optional_po with
+  | Some optional_po =>
+      caller_is_new_owner = builtin eq _sender optional_po;
+      match caller_is_new_owner with
+      | True =>
+          (* transfer ownership *)
+          current_owner := optional_po;
+          none = None {ByStr20};
+          pending_owner := none
+      | False => (* the caller is not the new owner, do nothing*)
+        err = CodeIsNotSender;
+        ThrowError err
+      end
+  | None => (* ownership transfer is not in-progress, do nothing *)
+  end
+end
