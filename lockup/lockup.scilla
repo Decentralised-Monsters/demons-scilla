@@ -1,0 +1,191 @@
+scilla_version 0
+
+library FungibleLockup
+
+let uint128_zero = Uint128 0
+let uint128_one = Uint128 1
+
+type TokenMove = | UserToContract | ContractToUser
+let user_to_contract        = UserToContract
+let contract_to_user        = ContractToUser
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+  Cons {Message} msg nil_msg
+
+let two_msgs =
+fun (msg1 : Message) =>
+fun (msg2 : Message) =>
+  let msgs_tmp = one_msg msg2 in
+  Cons {Message} msg1 msgs_tmp
+  
+(* Error exception *)
+type Error =
+  | NotContractOwner
+  | NotTimeToClaim
+  | LockupEntryDeadlineMissed
+  | UserAmountCurrentlyLocked
+  | NoAmountFoundForUser
+  | NotValidAmount
+  | UserAlreadyExistsInLocker
+  
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | NotContractOwner             => Int32 -1
+      | NotTimeToClaim               => Int32 -2
+      | LockupEntryDeadlineMissed    => Int32 -3
+      | UserAmountCurrentlyLocked    => Int32 -4
+      | NoAmountFoundForUser         => Int32 -5
+      | NotValidAmount               => Int32 -6
+      | UserAlreadyExistsInLocker    => Int32 -7
+      end
+    in
+    { _exception : "Error"; code : result_code; res : result}
+
+contract FungibleLockup
+(
+  contract_owner: ByStr20,
+  start_lockup_block: BNum,
+  end_lockup_block: BNum,
+  fungible_token_contract: ByStr20 with end,
+  amount_to_lock: Uint128
+)
+with
+  builtin blt start_lockup_block end_lockup_block
+=>
+
+field locker: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsContractOwner()
+  is_contract_owner = builtin eq contract_owner _sender;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = NotContractOwner;
+    ThrowError err
+  end
+end
+
+(* @dev: Moves `amount` of a fungible contract 'fungible_contract' from 'x' to 'y' with a toggle of the direction 'token_move'. *)
+procedure MoveFungibleTokenFromXToY(token_move: TokenMove, fungible_contract:ByStr20 with end, from: ByStr20, to: ByStr20, amount: Uint128)
+  match token_move with
+    | UserToContract =>
+        transfer_to_contract = {
+          _tag: "TransferFrom";
+          _recipient: fungible_contract;
+          _amount: uint128_zero;
+          from: from;
+          to: to;
+          amount: amount
+          };
+        msgs = one_msg transfer_to_contract;
+        send msgs
+        
+    | ContractToUser =>
+        transfer_to_user = {
+          _tag: "Transfer";
+          _recipient: fungible_contract;
+          _amount: uint128_zero;
+          to: to;
+          amount: amount
+        };
+        msgs = one_msg transfer_to_user;
+        send msgs
+    end
+end
+
+(* @dev: Allows a user to deposit 'amount_to_lock' of a fungible 'fungible_token_contract' if now is less than 'start_lockup_block'.*)
+(* @dev: Can throw an nested error if the fungible token is not approved to be spent *)
+transition Deposit()
+  now <-& BLOCKNUMBER;
+  (* is now < start_lockup_block? *)
+  valid_to_enter = builtin blt now start_lockup_block;
+  match valid_to_enter with
+    | True =>
+      (* does the user already exist in the locker? *)
+      maybe_sender_locker <- locker[_sender];
+      match maybe_sender_locker with 
+        | Some sender_locker => 
+          err = UserAlreadyExistsInLocker;
+          ThrowError err
+        | None => 
+          (* new deposit = amount*)
+          locker[_sender] := amount_to_lock;
+          MoveFungibleTokenFromXToY user_to_contract fungible_token_contract _sender _this_address amount_to_lock;
+          e = {_eventname : "InitalDepositSuccess"; depositing:amount_to_lock};
+          event e
+      end
+    | False =>
+      err = LockupEntryDeadlineMissed;
+      ThrowError err
+  end
+end
+
+(* @dev: Allows a user to withdraw 'amount_to_lock' from the contract if they exist if 'end_lockup_block' is less than now.*)
+transition WithdrawAfterDeadline()
+  now <-& BLOCKNUMBER;
+  (* is now > end_lockup_block then already started error *)
+  valid_to_leave = builtin blt end_lockup_block now;
+  match valid_to_leave with
+    | True =>
+      maybe_sender_amount <- locker[_sender];
+      match maybe_sender_amount with
+        | Some sender_amount =>
+          delete locker[_sender];
+          MoveFungibleTokenFromXToY contract_to_user fungible_token_contract _this_address _sender amount_to_lock;
+          e = {_eventname : "WithdrawAfterDeadlineSuccess"; withdrawing:amount_to_lock; to: _sender};
+          event e
+        | None =>
+          err = NoAmountFoundForUser;
+          ThrowError err
+      end
+    | False =>
+      err = UserAmountCurrentlyLocked;
+      ThrowError err
+  end
+end
+
+(* @dev: Allows a user to withdraw 'amount_to_lock' from the contract if they exist if now is less than 'start_lockup_block'.*)
+transition WithdrawBeforeDeadline()
+  now <-& BLOCKNUMBER;
+  (* is now < start_lockup_block then we can withdraw*)
+  valid_to_leave_early = builtin blt now start_lockup_block;
+  match valid_to_leave_early with
+    | True =>
+      maybe_sender_amount <- locker[_sender];
+      match maybe_sender_amount with
+        | Some sender_amount =>
+          delete locker[_sender];
+          MoveFungibleTokenFromXToY contract_to_user fungible_token_contract _this_address _sender amount_to_lock;
+          e = {_eventname : "WithdrawBeforeDeadlineSuccess"; withdrawing:amount_to_lock; to: _sender};
+          event e
+        | None =>
+          err = NoAmountFoundForUser;
+          ThrowError err
+      end
+    | False =>
+      err = UserAmountCurrentlyLocked;
+      ThrowError err
+  end
+end
+
+(* @dev: Callback from fungible.transfer *)
+transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+(* @dev: Callback from fungible.transfer *)
+transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+(* @dev: Callback from fungible.transferfrom *)
+transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+(* @dev: Callback from fungible.transferfrom *)
+transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end

@@ -1,0 +1,277 @@
+scilla_version 0
+
+(***************************************************)
+(*               Associated library                *)
+(***************************************************)
+
+import ListUtils
+
+library DMZAirdrop
+
+(* [start] DistributorLib.scillib [start] *)
+
+let one_msg =
+  fun (msg : Message) =>
+  let nil_msg = Nil {Message} in
+  Cons {Message} msg nil_msg
+
+(* Error events *)
+type Error =
+| CodeNotOwner
+| CodeNotPendingOwner
+| CodePendingOwnerNotEmpty
+| CodeInvalidProof
+| CodeAlreadyClaimed
+
+let make_error =
+  fun (result : Error) =>
+    let result_code =
+      match result with
+      | CodeNotOwner              => Int32 -1
+      | CodeNotPendingOwner       => Int32 -2
+      | CodePendingOwnerNotEmpty  => Int32 -3
+      | CodeInvalidProof          => Int32 -4
+      | CodeAlreadyClaimed        => Int32 -5
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+type DistributionLeaf =
+| DistributionLeaf of ByStr20 Uint128 (* account, amount *)
+
+type Claim =
+| Claim of DistributionLeaf (List ByStr32) (* leaf, proof path as a list of hashes *)
+
+let hash_leaf =
+  fun (d : DistributionLeaf) =>
+    match d with
+    | DistributionLeaf account amount =>
+      let amt_hash = builtin sha256hash amount in
+      let bytes = builtin concat account amt_hash in
+      builtin sha256hash bytes
+    end
+
+let bystr32_lt =
+  fun (h1 : ByStr32) =>
+  fun (h2 : ByStr32) =>
+    let h1int = builtin to_uint256 h1 in
+    let h2int = builtin to_uint256 h2 in
+    builtin lt h1int h2int
+
+let hash_leaves =
+  fun (h1 : ByStr32) =>
+  fun (h2 : ByStr32) =>
+    let less = bystr32_lt h1 h2 in
+    match less with
+    | True =>
+      let bytes = builtin concat h1 h2 in
+      builtin sha256hash bytes
+    | False =>
+      let bytes = builtin concat h2 h1 in
+      builtin sha256hash bytes
+    end
+
+let zero = Uint128 0
+let one = Uint32 1
+let yes = True
+let none = None {ByStr20}
+
+(* [end] DistributorLib.scillib [end] *)
+
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+
+contract DMZAirdrop
+(
+  token_contract : ByStr20,
+  init_owner : ByStr20,
+  merkle_root : ByStr32
+)
+
+(* Mutable fields *)
+
+field contract_owner : Option ByStr20 = Some {ByStr20} init_owner
+field pending_owner : Option ByStr20 = none
+
+field claimed_leafs : Map ByStr32 Bool = Emp ByStr32 Bool (* leaf hash -> True *)
+
+(**************************************)
+(*             Procedures             *)
+(**************************************)
+
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsOwner(address: ByStr20)
+  maybe_current_owner <- contract_owner;
+  match maybe_current_owner with
+  | Some current_owner =>
+    is_owner = builtin eq current_owner address;
+    match is_owner with
+    | True =>
+    | False =>
+      err = CodeNotOwner;
+      ThrowError err
+    end
+  | None =>
+    err = CodeNotOwner;
+    ThrowError err
+  end
+end
+
+procedure IsPendingOwner(address: ByStr20)
+  maybe_pending_owner <- pending_owner;
+  match maybe_pending_owner with
+  | Some current_pending_owner =>
+    is_pending_owner = builtin eq current_pending_owner address;
+    match is_pending_owner with
+    | True =>
+    | False =>
+      err = CodeNotPendingOwner;
+      ThrowError err
+    end
+  | None =>
+    err = CodeNotPendingOwner;
+    ThrowError err
+  end
+end
+
+procedure NoPendingOwner()
+  maybe_pending_owner <- pending_owner;
+  match maybe_pending_owner with
+  | Some p =>
+    err = CodePendingOwnerNotEmpty;
+    ThrowError err
+  | None =>
+  end
+end
+
+procedure IsUnclaimed(leaf_hash: ByStr32)
+  claimed <- claimed_leafs[leaf_hash];
+  match claimed with
+  | None =>
+  | Some true =>
+    err = CodeAlreadyClaimed;
+    ThrowError err
+  end
+end
+
+
+procedure VerifyInclusion(leaf_hash: ByStr32, proof: List ByStr32)
+    hash_list = @list_foldl ByStr32 ByStr32;
+    proof_root =
+      let hash_list = @list_foldl ByStr32 ByStr32 in
+      hash_list hash_leaves leaf_hash proof;
+    valid_root = builtin eq merkle_root proof_root;
+    match valid_root with
+    | False =>
+      err = CodeInvalidProof;
+      ThrowError err
+    | True => (* ok *)
+    end
+
+end
+
+procedure ValidateAndMarkClaim(claim: Claim)
+  match claim with
+  | Claim leaf proof =>
+    match leaf with
+    | DistributionLeaf account amount =>
+      leaf_hash = hash_leaf leaf;
+
+      IsUnclaimed leaf_hash;
+      VerifyInclusion leaf_hash proof;
+
+      claimed_leafs[leaf_hash] := yes;
+      e = {_eventname : "Claimed";  data : leaf};
+      event e
+    end
+  end
+end
+
+procedure Distribute(recipient: ByStr20, amount: Uint128)
+  msg_to_token = {_tag : "Transfer"; _recipient : token_contract; _amount : zero;
+                  to : recipient; amount : amount};
+  msgs = one_msg msg_to_token;
+  send msgs
+end
+
+(***************************************)
+(*             Transitions             *)
+(***************************************)
+
+(* @dev: Claims from a distribution for an epoch by providing proof of inclusion.               *)
+(* @param claim: The claim data, which contains leaf and proof for the claim. *)
+transition Claim(claim: Claim)
+  (* check and mark the claim *)
+  ValidateAndMarkClaim claim;
+
+  (* distribute the amount *)
+  match claim with
+  | Claim leaf proof =>
+    match leaf with
+    | DistributionLeaf account amount =>
+      Distribute account amount
+    end
+  end
+end
+
+
+(* @dev: Removes the contract_owner, meaning that new minters can no longer be added. Must not have a pending owner. *)
+transition RevokeOwnership()
+  IsOwner _sender;
+  NoPendingOwner;
+  contract_owner := none;
+  e = {_eventname : "OwnershipRevoked"; contract_owner : _sender};
+  event e
+end
+
+(* @dev: Transfers contract ownership to a new address. The new address must call the AcceptOwnership transition to finalize the transfer. *)
+(* @param new_owner: Address of the new contract_owner.                                                                                    *)
+transition TransferOwnership(new_owner: ByStr20)
+  IsOwner _sender;
+  o = Some {ByStr20} new_owner;
+  pending_owner := o;
+  e = {_eventname : "OwnershipTransferInitiated"; contract_owner : _sender; pending_owner : new_owner};
+  event e
+end
+
+(* @dev: Finalizes transfer of contract ownership. Must be called by the new contract_owner. *)
+transition AcceptOwnership()
+  IsPendingOwner _sender;
+  previous_contract_owner <- contract_owner;
+  o = Some {ByStr20} _sender;
+  contract_owner := o;
+  pending_owner := none;
+  e = {_eventname : "OwnershipTransferAccepted"; previous_contract_owner : previous_contract_owner; contract_owner : _sender};
+  event e
+end
+
+(* @dev: Redeems the tokens from the contract. *)
+transition RedeemTokens(amount: Uint128)
+  IsOwner _sender;
+  Distribute _sender amount;
+  e = {_eventname : "TokensRedeemedByAdmin"; contract_owner : _sender; amount : amount};
+  event e
+end
+
+(***************************************)
+(*             Callbacks               *)
+(***************************************)
+
+transition TransferSuccessCallBack(
+  sender : ByStr20,
+  recipient : ByStr20,
+  amount : Uint128
+)
+end
+
+transition RecipientAcceptTransfer(
+  sender : ByStr20,
+  recipient : ByStr20,
+  amount : Uint128
+)
+end
