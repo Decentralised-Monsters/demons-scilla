@@ -1,0 +1,180 @@
+scilla_version 0
+
+import ListUtils BoolUtils
+
+library FlatDistributorProxy
+
+let zero = Uint128 0
+
+(* Error events *)
+type Error =
+  | CodeNotAdmin
+  | CodeNotStagingAdmin
+  | CodeNotWhitelisted
+
+let bystr20_eq: ByStr20 -> ByStr20 -> Bool =
+  fun(e1 : ByStr20) =>
+  fun(e2 : ByStr20) => 
+    builtin eq e1 e2
+
+let is_whitelisted_address:List ByStr20 -> ByStr20 -> Bool = 
+  fun (whitelist : List ByStr20) => 
+  fun (address : ByStr20) =>
+    let inside = bystr20_eq address in
+    let is_available = @list_exists ByStr20 in
+    is_available inside whitelist
+    
+let listByStr20FilterOut =
+  fun(list: List ByStr20) =>
+  fun(bs: ByStr20) =>
+    let listByStr20Filter = @list_filter ByStr20 in
+    let fn = fun(v: ByStr20) =>
+      let b = builtin eq v bs in
+       negb b in
+      listByStr20Filter fn list
+
+let one_msg =
+  fun (m: Message) =>
+    let e = Nil {Message} in
+    Cons {Message} m e
+    
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeNotAdmin            => Int32 -1
+      | CodeNotStagingAdmin     => Int32 -2
+      | CodeNotWhitelisted      => Int32 -3
+      end
+    in
+    { _exception : "Error"; code : result_code }
+    
+contract FlatDistributorProxy(
+  init_implementation: ByStr20,
+  init_admin: ByStr20
+)
+
+(* Mutable fields *)
+field implementation: ByStr20 = init_implementation
+field admin: ByStr20 = init_admin
+field stagingadmin: Option ByStr20 = None {ByStr20}
+
+field whiteListedAddress: List (ByStr20) = Nil {ByStr20}
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+(***************************************************)
+(*                  Transition                     *)
+(***************************************************)
+
+(***************************************************)
+(*              Proxy Transition                   *)
+(***************************************************)
+transition UpgradeTo(new_implementation: ByStr20)
+    currentAdmin <- admin;
+    isAdmin = builtin eq currentAdmin _sender;
+    match isAdmin with
+    | True =>
+      implementation := new_implementation;
+      e = {_eventname: "Upgraded"; implementation: new_implementation};
+      event e
+    | False =>
+      err = CodeNotAdmin;
+      ThrowError err
+    end
+end
+
+transition ChangeProxyAdmin(newAdmin: ByStr20)
+    currentAdmin <- admin;
+    isAdmin = builtin eq currentAdmin _sender;
+    match isAdmin with
+    | True =>
+      new_staging_admin = Some {ByStr20} newAdmin;
+      stagingadmin := new_staging_admin;
+      e = {_eventname: "ChangeProxyAdmin"; oldAdmin: currentAdmin; newAdmin: newAdmin};
+      event e
+    | False =>
+      err = CodeNotAdmin;
+      ThrowError err
+    end
+end
+
+transition ClaimProxyAdmin()
+    staging_admin_o <- stagingadmin;
+    match staging_admin_o with
+    | Some staging_admin =>
+      is_stagingadmin = builtin eq staging_admin _sender;
+      match is_stagingadmin with
+      | True =>
+        admin := _sender;
+        tmp_staging_admin = None {ByStr20};
+        stagingadmin := tmp_staging_admin;
+        e = {_eventname: "ClaimProxyAdmin"; newAdmin: _sender};
+        event e
+      | False =>
+        err = CodeNotStagingAdmin;
+        ThrowError err
+      end
+    | None =>
+      err = CodeNotStagingAdmin;
+      ThrowError err
+    end
+end
+
+transition UpdateWhiteListedAddress(whitelist: List ByStr20)
+  currentAdmin <- admin;
+  isAdmin = builtin eq currentAdmin _sender;
+  match isAdmin with
+  | True =>
+    whiteListedAddress := whitelist;
+    e = {_eventname: "UpdateWhiteListedAddress"; list: whitelist};
+    event e
+  | False =>
+    err = CodeNotAdmin;
+    ThrowError err
+  end
+end
+
+(***************************************************)
+(*            House keeping transition             *)
+(***************************************************)
+transition Buy()
+  whiteList <- whiteListedAddress;
+  is_whitelisted = is_whitelisted_address whiteList _sender;
+  match is_whitelisted with
+  | True =>
+    newWhiteList = listByStr20FilterOut whiteList _sender;
+    whiteListedAddress := newWhiteList;
+    
+    accept;
+    impl <- implementation;
+    msg = {_tag: "Buy"; _recipient: impl; _amount: _amount; initiator: _sender};
+    msgs = one_msg msg;
+    send msgs
+  | False =>
+    err = CodeNotWhitelisted;
+    ThrowError err
+  end
+end
+
+transition BuyDemonWithDMZ()
+  whiteList <- whiteListedAddress;
+  is_whitelisted = is_whitelisted_address whiteList _sender;
+  match is_whitelisted with
+  | True =>
+    newWhiteList = listByStr20FilterOut whiteList _sender;
+    whiteListedAddress := newWhiteList;
+    
+    impl <- implementation;
+    msg = {_tag: "BuyDemonWithDMZ"; _recipient: impl; _amount: zero; initiator: _sender};
+    msgs = one_msg msg;
+    send msgs
+  | False =>
+    err = CodeNotWhitelisted;
+    ThrowError err
+  end
+end
